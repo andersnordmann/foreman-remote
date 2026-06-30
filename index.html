@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>claude-foreman — remote</title>
+<style>
+  :root { color-scheme: dark; --bg:#0e1116; --card:#161b22; --line:#2b313a; --fg:#e6edf3;
+          --mut:#9aa4b2; --ok:#2ea043; --warn:#d29922; --bad:#da3633; --accent:#388bfd; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;
+         padding:max(12px,env(safe-area-inset-top)) 12px 28px; }
+  h1 { font-size:17px; margin:4px 0 12px; letter-spacing:.2px; }
+  h1 .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--mut); margin-right:7px; vertical-align:middle; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin:0 0 12px; }
+  .row { display:flex; justify-content:space-between; gap:10px; padding:4px 0; }
+  .row .k { color:var(--mut); } .row .v { font-weight:600; text-align:right; word-break:break-word; }
+  .state { font-size:22px; font-weight:700; }
+  .muted { color:var(--mut); font-size:13px; }
+  label { display:block; color:var(--mut); font-size:12px; margin:8px 0 3px; }
+  input, select { width:100%; background:#0b0f14; border:1px solid var(--line); color:var(--fg);
+          border-radius:8px; padding:9px 10px; font:14px monospace; }
+  .btns { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:6px; }
+  button { border:0; border-radius:10px; padding:13px 10px; font-size:15px; font-weight:600; color:#fff; }
+  button:active { transform:translateY(1px); }
+  .b-pause{ background:var(--warn); } .b-resume{ background:var(--ok); } .b-stop{ background:var(--bad); }
+  .b-ghost{ background:#21262d; color:var(--fg); border:1px solid var(--line); }
+  .full { width:100%; margin-top:8px; }
+  #log { font:12px monospace; color:var(--mut); white-space:pre-wrap; max-height:160px; overflow:auto; }
+  .err { color:var(--bad); }
+  details summary { color:var(--mut); cursor:pointer; font-size:13px; }
+</style>
+</head>
+<body>
+  <h1><span class="dot" id="dot"></span>claude-foreman</h1>
+
+  <div class="card" style="padding:10px 14px">
+    <label style="margin:0 0 4px 0">instance</label>
+    <select id="instance" onchange="onInstanceChange()"><option>—</option></select>
+  </div>
+
+  <div class="card" id="statusCard">
+    <div class="state" id="state">—</div>
+    <div class="muted" id="ago">not connected</div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:10px 0">
+    <div class="row"><span class="k">batch</span><span class="v" id="batch">—</span></div>
+    <div class="row"><span class="k">item</span><span class="v" id="item">—</span></div>
+    <div class="row"><span class="k">pending</span><span class="v" id="pending">—</span></div>
+    <div class="row"><span class="k">command</span><span class="v" id="command">—</span></div>
+    <div class="row"><span class="k">ack</span><span class="v" id="ack">—</span></div>
+  </div>
+
+  <div class="card">
+    <div class="btns">
+      <button class="b-pause"  onclick="setControl('pause')">Pause</button>
+      <button class="b-resume" onclick="setControl('resume')">Resume</button>
+      <button class="b-stop"   onclick="setControl('stop')">Stop</button>
+    </div>
+    <button class="b-ghost full" onclick="refresh()">Refresh now</button>
+  </div>
+
+  <details class="card">
+    <summary>Connection (stored only on this device)</summary>
+    <label>Sync URL</label>
+    <input id="syncUrl" placeholder="libsql://foreman-....turso.io" autocapitalize="off" autocomplete="off" spellcheck="false">
+    <label>Auth token</label>
+    <input id="token" type="password" placeholder="eyJ..." autocapitalize="off" autocomplete="off" spellcheck="false">
+    <div class="btns" style="grid-template-columns:1fr 1fr">
+      <button class="b-ghost" onclick="saveCreds()">Save</button>
+      <button class="b-ghost" onclick="clearCreds()">Clear</button>
+    </div>
+    <p class="muted">Token is kept in this browser's localStorage only — never sent anywhere except Turso. Rotate it if this device is lost.</p>
+  </details>
+
+  <div class="card"><div id="log"></div></div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const LS_URL = "foreman_sync_url", LS_TOK = "foreman_token", LS_INST = "foreman_instance";
+let timer = null;
+
+function log(msg, isErr) {
+  const t = new Date().toLocaleTimeString();
+  $("log").textContent = `[${t}] ${msg}\n` + $("log").textContent;
+  if (isErr) $("log").classList.add("err");
+}
+function normalise(u){ return u.startsWith("libsql://") ? "https://"+u.slice(9) : u; }
+function creds(){ return { url: localStorage.getItem(LS_URL)||"", tok: localStorage.getItem(LS_TOK)||"" }; }
+
+async function pipeline(sql, args){
+  const c = creds();
+  if (!c.url || !c.tok) throw new Error("set Sync URL + token below");
+  const stmt = { sql }; if (args) stmt.args = args;
+  const res = await fetch(normalise(c.url).replace(/\/+$/,"") + "/v2/pipeline", {
+    method:"POST",
+    headers:{ "Authorization":"Bearer "+c.tok, "Content-Type":"application/json" },
+    body: JSON.stringify({ requests:[ { type:"execute", stmt } ] })
+  });
+  if (!res.ok) throw new Error("HTTP "+res.status+" "+(await res.text()).slice(0,160));
+  const j = await res.json();
+  for (const r of (j.results||[])) if (r.type==="error") throw new Error("SQL: "+((r.error||{}).message||"?"));
+  const result = j.results[0].response.result;
+  const cols = result.cols.map(c=>c.name);
+  return result.rows.map(row => Object.fromEntries(row.map((cell,i)=>[cols[i], cell.type==="null"?null:cell.value])));
+}
+
+function arg(v){ return { type:"text", value:String(v) }; }
+
+const COLORS = { running:"var(--ok)","idle":"var(--accent)", done:"var(--accent)",
+  "paused-remote":"var(--warn)","paused-review":"var(--warn)", "stopped-remote":"var(--bad)",
+  error:"var(--bad)" };
+
+let lastStatus = [], lastControl = [];   // cached rows, so an instance switch re-renders without a round-trip
+function selInst(){ return localStorage.getItem(LS_INST) || ""; }
+
+function populateInstances(){
+  const ids = lastStatus.map(r => r.id);
+  let cur = selInst();
+  if (!ids.includes(cur)) { cur = ids[0] || ""; if (cur) localStorage.setItem(LS_INST, cur); }
+  $("instance").innerHTML = ids.length
+    ? ids.map(id => `<option${id===cur?" selected":""}>${id}</option>`).join("")
+    : "<option>(no foreman reporting)</option>";
+}
+
+function renderSelected(){
+  const id = selInst();
+  const s = lastStatus.find(r => r.id === id);
+  const c = lastControl.find(r => r.id === id) || {};
+  if (s){
+    $("state").textContent = s.state || "—";
+    $("dot").style.background = $("state").style.color = COLORS[s.state] || "var(--mut)";
+    $("batch").textContent = s.batch ?? "—";
+    $("item").textContent = s.last_item || "—";
+    $("pending").textContent = s.pending ?? "—";
+    $("ago").textContent = s.updated_at ? agoStr(s.updated_at) : "—";
+  } else {
+    $("state").textContent = lastStatus.length ? "select an instance" : "no status yet";
+    $("dot").style.background = "var(--mut)"; $("state").style.color = "";
+    $("batch").textContent = $("item").textContent = $("pending").textContent = "—";
+    $("ago").textContent = lastStatus.length ? "—" : "foreman has not reported";
+  }
+  $("command").textContent = c.command || "none";
+  $("ack").textContent = c.ack_at || "—";
+}
+
+function onInstanceChange(){ localStorage.setItem(LS_INST, $("instance").value); renderSelected(); }
+
+async function refresh(){
+  try{
+    lastStatus  = await pipeline("SELECT * FROM foreman_status ORDER BY id");
+    lastControl = await pipeline("SELECT * FROM foreman_control ORDER BY id");
+    populateInstances();
+    renderSelected();
+  } catch(e){ log("refresh failed: "+e.message, true); $("ago").textContent="connection error"; }
+}
+
+function agoStr(iso){
+  const t = Date.parse(iso.replace(" ","T").replace("Z","Z")); if (isNaN(t)) return iso;
+  const s = Math.max(0, Math.round((Date.now()-t)/1000));
+  if (s<90) return s+"s ago"; if (s<5400) return Math.round(s/60)+"m ago"; return Math.round(s/3600)+"h ago";
+}
+
+async function setControl(cmd){
+  const id = selInst();
+  if (!id){ log("pick an instance first", true); return; }
+  if (cmd==="stop" && !confirm("Stop the foreman ('"+id+"') after the current batch?")) return;
+  try{
+    await pipeline(
+      "INSERT INTO foreman_control(id,command,requested_at,requested_by,ack_at) "+
+      "VALUES(?,?,?,'phone',NULL) ON CONFLICT(id) DO UPDATE SET "+
+      "command=excluded.command, requested_at=excluded.requested_at, requested_by='phone', ack_at=NULL",
+      [arg(id), arg(cmd), arg(new Date().toISOString())]);
+    log("["+id+"] control -> "+cmd);
+    refresh();
+  } catch(e){ log("set "+cmd+" failed: "+e.message, true); }
+}
+
+function saveCreds(){
+  localStorage.setItem(LS_URL, $("syncUrl").value.trim());
+  localStorage.setItem(LS_TOK, $("token").value.trim());
+  log("connection saved"); refresh();
+}
+function clearCreds(){ localStorage.removeItem(LS_URL); localStorage.removeItem(LS_TOK);
+  $("syncUrl").value=""; $("token").value=""; log("connection cleared"); }
+
+(function init(){
+  const c = creds(); $("syncUrl").value = c.url; if (c.tok) $("token").value = c.tok;
+  refresh();
+  timer = setInterval(refresh, 10000);   // auto-refresh every 10s
+})();
+</script>
+</body>
+</html>

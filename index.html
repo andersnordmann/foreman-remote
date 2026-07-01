@@ -269,7 +269,7 @@ function parseTs(iso){ return iso ? Date.parse(String(iso).replace(" ","T")) : N
 function durStr(sec){
   sec = Math.max(0, Math.round(sec));
   if (sec < 90) return sec+"s";
-  if (sec < 5400) return Math.round(sec/60)+"m";
+  if (sec < 3600) return Math.floor(sec/60)+"m";   // floor: clean 59m -> 1h rollover, no "60m" flash
   const h = Math.floor(sec/3600), m = Math.round((sec%3600)/60);
   return h+"h"+(m?" "+m+"m":"");
 }

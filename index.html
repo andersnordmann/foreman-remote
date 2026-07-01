@@ -71,6 +71,7 @@
       <div class="muted" id="ago">not connected</div>
       <hr style="border:0;border-top:1px solid var(--line);margin:10px 0">
       <div class="row"><span class="k">batch</span><span class="v" id="batch">—</span></div>
+      <div class="row"><span class="k">activity</span><span class="v" id="activity">—</span></div>
       <div class="row"><span class="k">runtime</span><span class="v" id="kills">—</span></div>
       <div class="row"><span class="k">item</span><span class="v" id="item">—</span></div>
       <div class="row"><span class="k">pending</span><span class="v" id="pending">—</span></div>
@@ -187,6 +188,9 @@ function renderSelected(){
     $("batch").textContent = s.batch ?? "—";
     $("item").textContent = s.last_item || "—";
     $("pending").textContent = s.pending ?? "—";
+    // activity = last_result: the live phase while running (worker / gate / committing /
+    // challenge), the batch outcome while idle. Lets the user see WHAT is happening.
+    $("activity").textContent = s.last_result || "—";
     // whole-run total (since foreman start) + data freshness
     const runT = parseTs(s.run_started_at);
     const runStr = isNaN(runT) ? "" : "run " + durStr((now-runT)/1000) + " · ";
@@ -207,7 +211,7 @@ function renderSelected(){
   } else {
     $("state").textContent = lastStatus.length ? "select an instance" : "no status yet";
     $("dot").style.background = "var(--mut)"; $("state").style.color = "";
-    $("batch").textContent = $("item").textContent = $("pending").textContent = $("kills").textContent = "—";
+    $("batch").textContent = $("item").textContent = $("pending").textContent = $("kills").textContent = $("activity").textContent = "—";
     $("ago").textContent = lastStatus.length ? "—" : "foreman has not reported";
   }
   $("command").textContent = c.command || "none";

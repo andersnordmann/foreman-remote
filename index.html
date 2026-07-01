@@ -263,7 +263,10 @@ async function refresh(){
 function agoStr(iso){
   const t = Date.parse(iso.replace(" ","T").replace("Z","Z")); if (isNaN(t)) return iso;
   const s = Math.max(0, Math.round((Date.now()-t)/1000));
-  if (s<90) return s+"s ago"; if (s<5400) return Math.round(s/60)+"m ago"; return Math.round(s/3600)+"h ago";
+  if (s<90) return s+"s ago";
+  if (s<3600) return Math.floor(s/60)+"m ago";                 // roll to hours past 59m (matches durStr)
+  const h = Math.floor(s/3600), m = Math.round((s%3600)/60);
+  return h+"h"+(m?" "+m+"m":"")+" ago";
 }
 function parseTs(iso){ return iso ? Date.parse(String(iso).replace(" ","T")) : NaN; }
 function durStr(sec){

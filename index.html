@@ -196,9 +196,9 @@ function renderSelected(){
     if (s.state === "running" && to > 0 && !isNaN(upd)){
       const el = Math.max(0,(now-upd)/1000), rem = to - el;
       if (rem >= 0){
-        $("kills").textContent = durStr(el) + " / " + durStr(to) + " · kills in " + durStr(rem);
+        $("kills").textContent = durStrS(el) + " / " + durStr(to) + " · kills in " + durStr(rem);
       } else {
-        $("kills").textContent = durStr(el) + " / " + durStr(to) + " · OVERDUE by " + durStr(-rem);
+        $("kills").textContent = durStrS(el) + " / " + durStr(to) + " · OVERDUE by " + durStr(-rem);
         $("overdue").hidden = false;
         $("overdue").textContent = "⚠ No update " + durStr(-rem) + " past this batch's timeout. "
           + "The foreman may be stuck, or the relay/PC is offline — stop it from the PC (GUI), not just here.";
@@ -272,6 +272,15 @@ function durStr(sec){
   if (sec < 5400) return Math.round(sec/60)+"m";
   const h = Math.floor(sec/3600), m = Math.round((sec%3600)/60);
   return h+"h"+(m?" "+m+"m":"");
+}
+// Like durStr but ALWAYS shows seconds — used for the live batch runtime so it visibly ticks
+// each refresh (an easy at-a-glance confirmation that the page actually updated).
+function durStrS(sec){
+  sec = Math.max(0, Math.round(sec));
+  const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+  if (h) return h+"h "+String(m).padStart(2,"0")+"m "+String(s).padStart(2,"0")+"s";
+  if (m) return m+"m "+String(s).padStart(2,"0")+"s";
+  return s+"s";
 }
 async function itemCmd(item, action){
   const id = selInst();

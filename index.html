@@ -41,7 +41,12 @@
   .qst { font:11px/1 monospace; font-weight:700; padding:3px 6px; border-radius:6px; background:#0b0f14; }
   .qtitle { color:var(--mut); font-size:13px; margin-top:4px; word-break:break-word; }
   .s-done{ color:var(--ok); } .s-pending{ color:var(--mut); }
-  .s-blocked,.s-escalated{ color:var(--bad); } .s-partial{ color:var(--warn); } .s-wontfix{ color:var(--accent); }
+  .s-blocked,.s-escalated{ color:var(--bad); } .s-partial{ color:var(--warn); } .s-wontfix{ color:var(--accent); } .s-parked{ color:var(--warn); }
+  .overdue { background:var(--bad); color:#fff; padding:9px 11px; border-radius:8px;
+             margin:0 0 12px; font-weight:600; font-size:13px; line-height:1.35; }
+  .qbtn { margin-left:auto; border:1px solid var(--line); background:#21262d; color:var(--fg);
+          border-radius:7px; padding:5px 10px; font-size:12px; font-weight:600; }
+  .qbtn.react { border-color:var(--ok); color:var(--ok); }
 </style>
 </head>
 <body>
@@ -59,10 +64,12 @@
 
   <div class="tabpane" id="pane-status">
     <div class="card" id="statusCard">
+      <div class="overdue" id="overdue" hidden></div>
       <div class="state" id="state">—</div>
       <div class="muted" id="ago">not connected</div>
       <hr style="border:0;border-top:1px solid var(--line);margin:10px 0">
       <div class="row"><span class="k">batch</span><span class="v" id="batch">—</span></div>
+      <div class="row"><span class="k">runtime</span><span class="v" id="kills">—</span></div>
       <div class="row"><span class="k">item</span><span class="v" id="item">—</span></div>
       <div class="row"><span class="k">pending</span><span class="v" id="pending">—</span></div>
       <div class="row"><span class="k">command</span><span class="v" id="command">—</span></div>
@@ -161,17 +168,35 @@ function renderSelected(){
   const id = selInst();
   const s = lastStatus.find(r => r.id === id);
   const c = lastControl.find(r => r.id === id) || {};
+  const now = Date.now();
+  $("overdue").hidden = true;
   if (s){
     $("state").textContent = s.state || "—";
     $("dot").style.background = $("state").style.color = COLORS[s.state] || "var(--mut)";
     $("batch").textContent = s.batch ?? "—";
     $("item").textContent = s.last_item || "—";
     $("pending").textContent = s.pending ?? "—";
-    $("ago").textContent = s.updated_at ? agoStr(s.updated_at) : "—";
+    // whole-run total (since foreman start) + data freshness
+    const runT = parseTs(s.run_started_at);
+    const runStr = isNaN(runT) ? "" : "run " + durStr((now-runT)/1000) + " · ";
+    $("ago").textContent = runStr + (s.updated_at ? "updated " + agoStr(s.updated_at) : "—");
+    // per-batch runtime + watchdog countdown — meaningful only while running
+    const to = Number(s.timeout_sec)||0, upd = parseTs(s.updated_at);
+    if (s.state === "running" && to > 0 && !isNaN(upd)){
+      const el = Math.max(0,(now-upd)/1000), rem = to - el;
+      if (rem >= 0){
+        $("kills").textContent = durStr(el) + " / " + durStr(to) + " · kills in " + durStr(rem);
+      } else {
+        $("kills").textContent = durStr(el) + " / " + durStr(to) + " · OVERDUE by " + durStr(-rem);
+        $("overdue").hidden = false;
+        $("overdue").textContent = "⚠ No update " + durStr(-rem) + " past this batch's timeout. "
+          + "The foreman may be stuck, or the relay/PC is offline — stop it from the PC (GUI), not just here.";
+      }
+    } else { $("kills").textContent = "—"; }
   } else {
     $("state").textContent = lastStatus.length ? "select an instance" : "no status yet";
     $("dot").style.background = "var(--mut)"; $("state").style.color = "";
-    $("batch").textContent = $("item").textContent = $("pending").textContent = "—";
+    $("batch").textContent = $("item").textContent = $("pending").textContent = $("kills").textContent = "—";
     $("ago").textContent = lastStatus.length ? "—" : "foreman has not reported";
   }
   $("command").textContent = c.command || "none";
@@ -190,12 +215,15 @@ function renderQueue(){
   try { counts = JSON.parse(row.counts_json || "{}"); } catch(e){}
   try { items  = JSON.parse(row.items_json  || "[]"); } catch(e){}
   $("qcounts").textContent = Object.entries(counts).map(([k,v]) => k+": "+v).join("   ") || "(empty)";
-  $("qlist").innerHTML = items.map(i =>
-    `<div class="qitem"><div class="qhead">`+
-    `<span class="qst s-${esc(i.status)}">${esc(i.status)}</span>`+
-    `<b>${esc(i.id)}</b><span class="muted">${esc(i.ledger||"")}</span></div>`+
-    `<div class="qtitle">${esc(i.title||"")}</div></div>`).join("")
-    || '<div class="muted">no items</div>';
+  $("qlist").innerHTML = items.map(i => {
+    let btn = "";
+    if (i.status === "pending")      btn = `<button class="qbtn" onclick="itemCmd('${esc(i.id)}','skip')">Skip</button>`;
+    else if (i.status === "parked")  btn = `<button class="qbtn react" onclick="itemCmd('${esc(i.id)}','reactivate')">Reactivate</button>`;
+    return `<div class="qitem"><div class="qhead">`+
+      `<span class="qst s-${esc(i.status)}">${esc(i.status)}</span>`+
+      `<b>${esc(i.id)}</b><span class="muted">${esc(i.ledger||"")}</span>${btn}</div>`+
+      `<div class="qtitle">${esc(i.title||"")}</div></div>`;
+  }).join("") || '<div class="muted">no items</div>';
 }
 
 async function refresh(){
@@ -214,6 +242,26 @@ function agoStr(iso){
   const t = Date.parse(iso.replace(" ","T").replace("Z","Z")); if (isNaN(t)) return iso;
   const s = Math.max(0, Math.round((Date.now()-t)/1000));
   if (s<90) return s+"s ago"; if (s<5400) return Math.round(s/60)+"m ago"; return Math.round(s/3600)+"h ago";
+}
+function parseTs(iso){ return iso ? Date.parse(String(iso).replace(" ","T")) : NaN; }
+function durStr(sec){
+  sec = Math.max(0, Math.round(sec));
+  if (sec < 90) return sec+"s";
+  if (sec < 5400) return Math.round(sec/60)+"m";
+  const h = Math.floor(sec/3600), m = Math.round((sec%3600)/60);
+  return h+"h"+(m?" "+m+"m":"");
+}
+async function itemCmd(item, action){
+  const id = selInst();
+  if (!id){ log("pick an instance first", true); return; }
+  try{
+    await pipeline(
+      "INSERT INTO foreman_item_ctl(id,item,action,requested_at) VALUES(?,?,?,?) "+
+      "ON CONFLICT(id,item) DO UPDATE SET action=excluded.action, requested_at=excluded.requested_at",
+      [arg(id), arg(item), arg(action), arg(new Date().toISOString())]);
+    log("["+id+"] "+action+" -> "+item);
+    refresh();
+  } catch(e){ log(action+" "+item+" failed: "+e.message, true); }
 }
 
 async function setControl(cmd){

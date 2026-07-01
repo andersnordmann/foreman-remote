@@ -135,11 +135,19 @@ async function pipeline(sql, args){
   const c = creds();
   if (!c.url || !c.tok) throw new Error("set Sync URL + token below");
   const stmt = { sql }; if (args) stmt.args = args;
-  const res = await fetch(normalise(c.url).replace(/\/+$/,"") + "/v2/pipeline", {
-    method:"POST",
-    headers:{ "Authorization":"Bearer "+c.tok, "Content-Type":"application/json" },
-    body: JSON.stringify({ requests:[ { type:"execute", stmt } ] })
-  });
+  // 8s timeout: without it a hung request never rejects and stacks up behind the 10s poll,
+  // so on resume from a backgrounded/asleep tab they all reject at once ("Failed to fetch" x N).
+  const ctl = new AbortController();
+  const to = setTimeout(()=>ctl.abort(), 8000);
+  let res;
+  try {
+    res = await fetch(normalise(c.url).replace(/\/+$/,"") + "/v2/pipeline", {
+      method:"POST",
+      headers:{ "Authorization":"Bearer "+c.tok, "Content-Type":"application/json" },
+      body: JSON.stringify({ requests:[ { type:"execute", stmt } ] }),
+      signal: ctl.signal
+    });
+  } finally { clearTimeout(to); }
   if (!res.ok) throw new Error("HTTP "+res.status+" "+(await res.text()).slice(0,160));
   const j = await res.json();
   for (const r of (j.results||[])) if (r.type==="error") throw new Error("SQL: "+((r.error||{}).message||"?"));
@@ -155,6 +163,7 @@ const COLORS = { running:"var(--ok)","idle":"var(--accent)", done:"var(--accent)
   error:"var(--bad)" };
 
 let lastStatus = [], lastControl = [], lastQueue = [];   // cached rows, so an instance switch re-renders without a round-trip
+let _refreshFails = 0;   // consecutive refresh failures — log only the first of a streak (don't spam transient blips)
 function selInst(){ return localStorage.getItem(LS_INST) || ""; }
 
 function populateInstances(){
@@ -241,7 +250,14 @@ async function refresh(){
     populateInstances();
     renderSelected();
     renderQueue();
-  } catch(e){ log("refresh failed: "+e.message, true); $("ago").textContent="connection error"; }
+    if (_refreshFails){ log("connection recovered"); _refreshFails = 0; }
+  } catch(e){
+    // Log only the FIRST failure of a streak (a backgrounded tab resuming before the network is
+    // back, a Turso edge blip): the 10s poll IS the retry, so don't spam a line every cycle.
+    if (_refreshFails === 0) log("refresh failed: "+e.message+" (retrying every 10s)", true);
+    _refreshFails++;
+    $("ago").textContent = "connection error (retrying)";
+  }
 }
 
 function agoStr(iso){
@@ -293,10 +309,19 @@ function saveCreds(){
 function clearCreds(){ localStorage.removeItem(LS_URL); localStorage.removeItem(LS_TOK);
   $("syncUrl").value=""; $("token").value=""; log("connection cleared"); }
 
+function startPolling(){ if (!timer) timer = setInterval(refresh, 10000); }   // auto-refresh every 10s
+function stopPolling(){ if (timer){ clearInterval(timer); timer = null; } }
+// A phone suspends a backgrounded/screen-off tab; its setInterval callbacks queue and then fire in a
+// burst on resume, before the network is back -> a cluster of "refresh failed". Instead: stop polling
+// while hidden, and on resume do ONE refresh then restart the interval.
+document.addEventListener("visibilitychange", ()=>{
+  if (document.hidden) stopPolling();
+  else { refresh(); startPolling(); }
+});
 (function init(){
   const c = creds(); $("syncUrl").value = c.url; if (c.tok) $("token").value = c.tok;
   refresh();
-  timer = setInterval(refresh, 10000);   // auto-refresh every 10s
+  startPolling();
 })();
 </script>
 </body>

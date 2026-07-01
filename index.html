@@ -199,17 +199,24 @@ function renderSelected(){
     const runT = parseTs(s.run_started_at);
     const runStr = isNaN(runT) ? "" : "run " + durStr((now-runT)/1000) + " · ";
     $("ago").textContent = runStr + (s.updated_at ? "updated " + agoStr(s.updated_at) : "—");
-    // per-batch runtime + watchdog countdown — meaningful only while running
+    // runtime = elapsed in the CURRENT phase (updated_at advances at each phase). The worker
+    // phase also carries a watchdog (timeout_sec>0) -> append "/ <cap> · kills in"; the gate /
+    // commit / challenge phases have no watchdog, so show the elapsed alone.
     const to = Number(s.timeout_sec)||0, upd = parseTs(s.updated_at);
-    if (s.state === "running" && to > 0 && !isNaN(upd)){
-      const el = Math.max(0,(now-upd)/1000), rem = to - el;
-      if (rem >= 0){
-        $("kills").textContent = durStrS(el) + " / " + durStr(to) + " · kills in " + durStr(rem);
+    if (s.state === "running" && !isNaN(upd)){
+      const el = Math.max(0,(now-upd)/1000);
+      if (to > 0){
+        const rem = to - el;
+        if (rem >= 0){
+          $("kills").textContent = durStrS(el) + " / " + durStr(to) + " · kills in " + durStr(rem);
+        } else {
+          $("kills").textContent = durStrS(el) + " / " + durStr(to) + " · OVERDUE by " + durStr(-rem);
+          $("overdue").hidden = false;
+          $("overdue").textContent = "⚠ No update " + durStr(-rem) + " past this batch's timeout. "
+            + "The foreman may be stuck, or the relay/PC is offline — stop it from the PC (GUI), not just here.";
+        }
       } else {
-        $("kills").textContent = durStrS(el) + " / " + durStr(to) + " · OVERDUE by " + durStr(-rem);
-        $("overdue").hidden = false;
-        $("overdue").textContent = "⚠ No update " + durStr(-rem) + " past this batch's timeout. "
-          + "The foreman may be stuck, or the relay/PC is offline — stop it from the PC (GUI), not just here.";
+        $("kills").textContent = durStrS(el);   // gate / commit / challenge: elapsed, no watchdog
       }
     } else { $("kills").textContent = "—"; }
   } else {

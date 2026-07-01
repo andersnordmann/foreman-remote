@@ -29,6 +29,19 @@
   #log { font:12px monospace; color:var(--mut); white-space:pre-wrap; max-height:160px; overflow:auto; }
   .err { color:var(--bad); }
   details summary { color:var(--mut); cursor:pointer; font-size:13px; }
+  .tabs { display:flex; gap:6px; margin:0 0 12px; }
+  .tab { flex:1; background:#0b0f14; border:1px solid var(--line); color:var(--mut);
+         border-radius:10px; padding:11px 8px; font-size:14px; font-weight:600; }
+  .tab.active { color:var(--fg); background:var(--card); border-color:var(--accent); }
+  .tabpane[hidden] { display:none; }
+  .qcounts { margin:0 0 10px; }
+  .qitem { padding:9px 0; border-top:1px solid var(--line); }
+  .qitem:first-child { border-top:0; }
+  .qhead { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .qst { font:11px/1 monospace; font-weight:700; padding:3px 6px; border-radius:6px; background:#0b0f14; }
+  .qtitle { color:var(--mut); font-size:13px; margin-top:4px; word-break:break-word; }
+  .s-done{ color:var(--ok); } .s-pending{ color:var(--mut); }
+  .s-blocked,.s-escalated{ color:var(--bad); } .s-partial{ color:var(--warn); } .s-wontfix{ color:var(--accent); }
 </style>
 </head>
 <body>
@@ -39,24 +52,38 @@
     <select id="instance" onchange="onInstanceChange()"><option>—</option></select>
   </div>
 
-  <div class="card" id="statusCard">
-    <div class="state" id="state">—</div>
-    <div class="muted" id="ago">not connected</div>
-    <hr style="border:0;border-top:1px solid var(--line);margin:10px 0">
-    <div class="row"><span class="k">batch</span><span class="v" id="batch">—</span></div>
-    <div class="row"><span class="k">item</span><span class="v" id="item">—</span></div>
-    <div class="row"><span class="k">pending</span><span class="v" id="pending">—</span></div>
-    <div class="row"><span class="k">command</span><span class="v" id="command">—</span></div>
-    <div class="row"><span class="k">ack</span><span class="v" id="ack">—</span></div>
+  <div class="tabs">
+    <button class="tab active" id="tab-status" onclick="showTab('status')">Status</button>
+    <button class="tab" id="tab-queue" onclick="showTab('queue')">To-do</button>
   </div>
 
-  <div class="card">
-    <div class="btns">
-      <button class="b-pause"  onclick="setControl('pause')">Pause</button>
-      <button class="b-resume" onclick="setControl('resume')">Resume</button>
-      <button class="b-stop"   onclick="setControl('stop')">Stop</button>
+  <div class="tabpane" id="pane-status">
+    <div class="card" id="statusCard">
+      <div class="state" id="state">—</div>
+      <div class="muted" id="ago">not connected</div>
+      <hr style="border:0;border-top:1px solid var(--line);margin:10px 0">
+      <div class="row"><span class="k">batch</span><span class="v" id="batch">—</span></div>
+      <div class="row"><span class="k">item</span><span class="v" id="item">—</span></div>
+      <div class="row"><span class="k">pending</span><span class="v" id="pending">—</span></div>
+      <div class="row"><span class="k">command</span><span class="v" id="command">—</span></div>
+      <div class="row"><span class="k">ack</span><span class="v" id="ack">—</span></div>
     </div>
-    <button class="b-ghost full" onclick="refresh()">Refresh now</button>
+
+    <div class="card">
+      <div class="btns">
+        <button class="b-pause"  onclick="setControl('pause')">Pause</button>
+        <button class="b-resume" onclick="setControl('resume')">Resume</button>
+        <button class="b-stop"   onclick="setControl('stop')">Stop</button>
+      </div>
+      <button class="b-ghost full" onclick="refresh()">Refresh now</button>
+    </div>
+  </div>
+
+  <div class="tabpane" id="pane-queue" hidden>
+    <div class="card">
+      <div class="qcounts muted" id="qcounts">—</div>
+      <div id="qlist"></div>
+    </div>
   </div>
 
   <details class="card">
@@ -79,6 +106,13 @@
 const $ = id => document.getElementById(id);
 const LS_URL = "foreman_sync_url", LS_TOK = "foreman_token", LS_INST = "foreman_instance";
 let timer = null;
+const esc = s => String(s==null?"":s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function showTab(name){
+  for (const t of ["status","queue"]){
+    $("pane-"+t).hidden = (t!==name);
+    $("tab-"+t).classList.toggle("active", t===name);
+  }
+}
 
 function log(msg, isErr) {
   const t = new Date().toLocaleTimeString();
@@ -111,7 +145,7 @@ const COLORS = { running:"var(--ok)","idle":"var(--accent)", done:"var(--accent)
   "paused-remote":"var(--warn)","paused-review":"var(--warn)", "stopped-remote":"var(--bad)",
   error:"var(--bad)" };
 
-let lastStatus = [], lastControl = [];   // cached rows, so an instance switch re-renders without a round-trip
+let lastStatus = [], lastControl = [], lastQueue = [];   // cached rows, so an instance switch re-renders without a round-trip
 function selInst(){ return localStorage.getItem(LS_INST) || ""; }
 
 function populateInstances(){
@@ -144,14 +178,35 @@ function renderSelected(){
   $("ack").textContent = c.ack_at || "—";
 }
 
-function onInstanceChange(){ localStorage.setItem(LS_INST, $("instance").value); renderSelected(); }
+function onInstanceChange(){ localStorage.setItem(LS_INST, $("instance").value); renderSelected(); renderQueue(); }
+
+function renderQueue(){
+  const row = lastQueue.find(r => r.id === selInst());
+  if (!row){
+    $("qcounts").textContent = lastQueue.length ? "—" : "(no to-do reported yet)";
+    $("qlist").innerHTML = ""; return;
+  }
+  let counts = {}, items = [];
+  try { counts = JSON.parse(row.counts_json || "{}"); } catch(e){}
+  try { items  = JSON.parse(row.items_json  || "[]"); } catch(e){}
+  $("qcounts").textContent = Object.entries(counts).map(([k,v]) => k+": "+v).join("   ") || "(empty)";
+  $("qlist").innerHTML = items.map(i =>
+    `<div class="qitem"><div class="qhead">`+
+    `<span class="qst s-${esc(i.status)}">${esc(i.status)}</span>`+
+    `<b>${esc(i.id)}</b><span class="muted">${esc(i.ledger||"")}</span></div>`+
+    `<div class="qtitle">${esc(i.title||"")}</div></div>`).join("")
+    || '<div class="muted">no items</div>';
+}
 
 async function refresh(){
   try{
     lastStatus  = await pipeline("SELECT * FROM foreman_status ORDER BY id");
     lastControl = await pipeline("SELECT * FROM foreman_control ORDER BY id");
+    try { lastQueue = await pipeline("SELECT * FROM foreman_queue ORDER BY id"); }
+    catch(e){ lastQueue = []; }   // older DB without the queue table — status still works
     populateInstances();
     renderSelected();
+    renderQueue();
   } catch(e){ log("refresh failed: "+e.message, true); $("ago").textContent="connection error"; }
 }
 

@@ -41,8 +41,9 @@
   .qst { font:11px/1 monospace; font-weight:700; padding:3px 6px; border-radius:6px; background:#0b0f14; }
   .qtitle { color:var(--mut); font-size:13px; margin-top:4px; word-break:break-word; }
   .s-done{ color:var(--ok); } .s-pending{ color:var(--mut); }
-  .s-blocked,.s-escalated{ color:var(--bad); } .s-partial{ color:var(--warn); } .s-wontfix{ color:var(--accent); } .s-parked{ color:var(--warn); }
+  .s-blocked,.s-escalated{ color:var(--bad); } .s-partial{ color:var(--warn); } .s-wontfix{ color:var(--mut); } .s-parked{ color:var(--warn); }
   .s-running{ color:var(--ok); } .q-run{ border-left:3px solid var(--ok); padding-left:8px; }
+  .q-dim{ opacity:.45; }   /* wontfix: a closed decision — recedes */
   .overdue { background:var(--bad); color:#fff; padding:9px 11px; border-radius:8px;
              margin:0 0 12px; font-weight:600; font-size:13px; line-height:1.35; }
   .qbtn { margin-left:auto; border:1px solid var(--line); background:#21262d; color:var(--fg);
@@ -223,7 +224,8 @@ function renderQueue(){
     if (i.status === "pending")      btn = `<button class="qbtn" onclick="itemCmd('${esc(i.id)}','skip')">Skip</button>`;
     else if (i.status === "parked")  btn = `<button class="qbtn react" onclick="itemCmd('${esc(i.id)}','reactivate')">Reactivate</button>`;
     const working = i.id && i.id === runId;   // status stays 'pending'; shown as ▶ working
-    return `<div class="qitem${working?' q-run':''}"><div class="qhead">`+
+    const rowcls = working ? " q-run" : (i.status === "wontfix" ? " q-dim" : "");
+    return `<div class="qitem${rowcls}"><div class="qhead">`+
       `<span class="qst ${working?'s-running':'s-'+esc(i.status)}">${working?'▶ working':esc(i.status)}</span>`+
       `<b>${esc(i.id)}</b><span class="muted">${esc(i.ledger||"")}</span>${btn}</div>`+
       `<div class="qtitle" title="${esc(i.title||"")}">${esc(i.title||"")}</div></div>`;

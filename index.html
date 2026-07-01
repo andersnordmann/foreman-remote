@@ -226,7 +226,7 @@ function renderQueue(){
     return `<div class="qitem${working?' q-run':''}"><div class="qhead">`+
       `<span class="qst ${working?'s-running':'s-'+esc(i.status)}">${working?'▶ working':esc(i.status)}</span>`+
       `<b>${esc(i.id)}</b><span class="muted">${esc(i.ledger||"")}</span>${btn}</div>`+
-      `<div class="qtitle">${esc(i.title||"")}</div></div>`;
+      `<div class="qtitle" title="${esc(i.title||"")}">${esc(i.title||"")}</div></div>`;
   }).join("") || '<div class="muted">no items</div>';
 }
 

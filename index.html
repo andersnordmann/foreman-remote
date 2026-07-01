@@ -72,6 +72,7 @@
       <hr style="border:0;border-top:1px solid var(--line);margin:10px 0">
       <div class="row"><span class="k">batch</span><span class="v" id="batch">—</span></div>
       <div class="row"><span class="k">activity</span><span class="v" id="activity">—</span></div>
+      <div class="row"><span class="k">activity since</span><span class="v" id="activitySince">—</span></div>
       <div class="row"><span class="k">runtime</span><span class="v" id="kills">—</span></div>
       <div class="row"><span class="k">item</span><span class="v" id="item">—</span></div>
       <div class="row"><span class="k">pending</span><span class="v" id="pending">—</span></div>
@@ -191,6 +192,9 @@ function renderSelected(){
     // activity = last_result: the live phase while running (worker / gate / committing /
     // challenge), the batch outcome while idle. Lets the user see WHAT is happening.
     $("activity").textContent = s.last_result || "—";
+    // activity since = when the current phase started. Each phase heartbeat updates updated_at,
+    // so this is the phase's start; only meaningful while running (idle => the outcome, no phase).
+    $("activitySince").textContent = (s.state === "running" && s.last_result && s.updated_at) ? localTs(s.updated_at) : "—";
     // whole-run total (since foreman start) + data freshness
     const runT = parseTs(s.run_started_at);
     const runStr = isNaN(runT) ? "" : "run " + durStr((now-runT)/1000) + " · ";
@@ -211,7 +215,7 @@ function renderSelected(){
   } else {
     $("state").textContent = lastStatus.length ? "select an instance" : "no status yet";
     $("dot").style.background = "var(--mut)"; $("state").style.color = "";
-    $("batch").textContent = $("item").textContent = $("pending").textContent = $("kills").textContent = $("activity").textContent = "—";
+    $("batch").textContent = $("item").textContent = $("pending").textContent = $("kills").textContent = $("activity").textContent = $("activitySince").textContent = "—";
     $("ago").textContent = lastStatus.length ? "—" : "foreman has not reported";
   }
   $("command").textContent = c.command || "none";

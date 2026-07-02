@@ -177,7 +177,7 @@ function arg(v){ return { type:"text", value:String(v) }; }
 
 const COLORS = { running:"var(--ok)","idle":"var(--accent)", done:"var(--accent)",
   "paused-remote":"var(--warn)","paused-review":"var(--warn)", "stopped-remote":"var(--bad)",
-  error:"var(--bad)" };
+  stopped:"var(--bad)", crashed:"var(--bad)", error:"var(--bad)" };
 
 let lastStatus = [], lastControl = [], lastQueue = [];   // cached rows, so an instance switch re-renders without a round-trip
 let _refreshFails = 0;   // consecutive refresh failures — log only the first of a streak (don't spam transient blips)
@@ -236,11 +236,32 @@ function renderSelected(){
         $("kills").textContent = durStrS(el);   // gate / commit / challenge: elapsed, no watchdog
       }
     } else { $("kills").textContent = "—"; }
-    // token usage (cumulative for THIS run) + a rough cost estimate. Opus 4.8 rate ($5/$25 per M)
-    // is an UPPER bound: the Sonnet challenger is cheaper and intro pricing lowers it further.
+    // BEAT-LIVENESS (network-hole handling): the foreman beats updated_at every ~25s for the WHOLE run.
+    // If it reads 'running' but no beat has landed for BEAT_STALE_SEC (several missed beats), it is NOT
+    // confirmed live — the process died without marking 'crashed' (e.g. a tree-kill that took the beater
+    // too) or the relay/network dropped. Flag amber 'no signal' rather than a green 'running', in ANY
+    // phase (the timeout-based OVERDUE above only covers the worker phase).
+    const BEAT_STALE_SEC = 90;
+    if (s.state === "running" && !isNaN(upd) && (now-upd)/1000 > BEAT_STALE_SEC){
+      $("dot").style.background = $("state").style.color = "var(--warn)";
+      $("state").textContent = "no signal";
+      $("overdue").hidden = false;
+      $("overdue").textContent = "⚠ No heartbeat for " + agoStr(s.updated_at).replace(" ago","")
+        + " (foreman beats ~every 25s). It is down or the relay/PC is offline — verify from the PC.";
+    }
+    // token usage (cumulative for THIS run) + a rough cost estimate. Opus 4.8 $/M: input 5, output 25,
+    // cache-read 0.5 (0.1x), cache-write 6.25 (1.25x, 5m ephemeral). Pricing cache-reads at the base
+    // input rate would overstate cost ~10x on the cached portion — the split is what makes it honest.
+    // UPPER bound still: the Sonnet challenger is cheaper and intro pricing lowers it further.
     const tin = Number(s.tokens_in)||0, tout = Number(s.tokens_out)||0;
-    $("tokens").textContent = (tin || tout)
-      ? fmtTok(tin) + " in / " + fmtTok(tout) + " out · ~$" + (tin/1e6*5 + tout/1e6*25).toFixed(2) + " est"
+    const tcr = Number(s.tokens_cache_read)||0, tcw = Number(s.tokens_cache_write)||0;
+    const hasSplit = tcr > 0 || tcw > 0;   // false for pre-split runs (only lumped tokens_in)
+    const est = (hasSplit ? (tin/1e6*5 + tcr/1e6*0.5 + tcw/1e6*6.25 + tout/1e6*25)
+                          : (tin/1e6*5 + tout/1e6*25)).toFixed(2);   // lumped 'in' priced at base = over-estimate
+    $("tokens").textContent = (tin || tout || tcr || tcw)
+      ? (hasSplit
+          ? fmtTok(tin) + " in + " + fmtTok(tcr) + " cache · " + fmtTok(tout) + " out · ~$" + est + " est"
+          : fmtTok(tin) + " in / " + fmtTok(tout) + " out · ~$" + est + " est")
       : "—";
   } else {
     $("state").textContent = lastStatus.length ? "select an instance" : "no status yet";

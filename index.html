@@ -40,6 +40,7 @@
   .qhead { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .qst { font:11px/1 monospace; font-weight:700; padding:3px 6px; border-radius:6px; background:#0b0f14; }
   .qtitle { color:var(--mut); font-size:13px; margin-top:4px; word-break:break-word; }
+  .srow { padding:6px 2px; border-bottom:1px solid var(--line); font-size:13.5px; line-height:1.4; }
   .s-done{ color:var(--ok); } .s-pending{ color:var(--mut); }
   .s-blocked,.s-escalated{ color:var(--bad); } .s-partial{ color:var(--warn); } .s-wontfix{ color:var(--mut); } .s-parked{ color:var(--warn); }
   .s-running{ color:var(--ok); } .q-run{ border-left:3px solid var(--ok); padding-left:8px; }
@@ -62,6 +63,7 @@
   <div class="tabs">
     <button class="tab active" id="tab-status" onclick="showTab('status')">Status</button>
     <button class="tab" id="tab-queue" onclick="showTab('queue')">To-do</button>
+    <button class="tab" id="tab-story" onclick="showTab('story')">Story</button>
   </div>
 
   <div class="tabpane" id="pane-status">
@@ -97,6 +99,13 @@
     </div>
   </div>
 
+  <div class="tabpane" id="pane-story" hidden>
+    <div class="card">
+      <div class="muted" style="margin-bottom:8px">Plain-English feed of what the run is doing (newest first).</div>
+      <div id="storylist"></div>
+    </div>
+  </div>
+
   <details class="card">
     <summary>Connection (stored only on this device)</summary>
     <label>Sync URL</label>
@@ -119,7 +128,7 @@ const LS_URL = "foreman_sync_url", LS_TOK = "foreman_token", LS_INST = "foreman_
 let timer = null;
 const esc = s => String(s==null?"":s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function showTab(name){
-  for (const t of ["status","queue"]){
+  for (const t of ["status","queue","story"]){
     $("pane-"+t).hidden = (t!==name);
     $("tab-"+t).classList.toggle("active", t===name);
   }
@@ -256,6 +265,15 @@ function renderQueue(){
   }).join("") || '<div class="muted">no items</div>';
 }
 
+function renderStory(){
+  const s = lastStatus.find(r => r.id === selInst());
+  let story = [];
+  try { story = JSON.parse((s && s.story) || "[]"); } catch(e){ story = []; }
+  $("storylist").innerHTML = (Array.isArray(story) && story.length)
+    ? story.map(l => `<div class="srow">${esc(l)}</div>`).join("")
+    : "<div class='muted'>No story yet — it fills in as the run works.</div>";
+}
+
 async function refresh(){
   try{
     lastStatus  = await pipeline("SELECT * FROM foreman_status ORDER BY id");
@@ -265,6 +283,7 @@ async function refresh(){
     populateInstances();
     renderSelected();
     renderQueue();
+    renderStory();
     if (_refreshFails){ log("connection recovered"); _refreshFails = 0; }
   } catch(e){
     // Log only the FIRST failure of a streak (a backgrounded tab resuming before the network is

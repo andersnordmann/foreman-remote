@@ -77,6 +77,7 @@
       <div class="row"><span class="k">activity</span><span class="v" id="activity">—</span></div>
       <div class="row"><span class="k">activity since</span><span class="v" id="activitySince">—</span></div>
       <div class="row"><span class="k">runtime</span><span class="v" id="kills">—</span></div>
+      <div class="row"><span class="k">last heartbeat</span><span class="v" id="lastBeat">—</span></div>
       <hr style="border:0;border-top:1px solid var(--line);margin:8px 0;opacity:.45">
       <!-- RUN SO FAR: progress through the queue + accumulated cost -->
       <div class="row"><span class="k">cycle</span><span class="v" id="batch">—</span></div>
@@ -207,15 +208,17 @@ function renderSelected(){
     // activity = last_result: the live phase while running (worker / gate / committing /
     // challenge), the batch outcome while idle. Lets the user see WHAT is happening.
     $("activity").textContent = s.last_result || "—";
-    // activity since = when the current phase started. Each phase heartbeat updates updated_at,
-    // so this is the phase's start; only meaningful while running (idle => the outcome, no phase).
+    // activity since = when the current phase started. updated_at moves ONLY on a real phase
+    // heartbeat (worker/gate/committing/challenge) — NOT on the 25s liveness beat (that is last_beat)
+    // — so this is the phase's true start; only meaningful while running (idle => the outcome).
     $("activitySince").textContent = (s.state === "running" && s.last_result && s.updated_at) ? localTs(s.updated_at) : "—";
     // start time + whole-run total (since foreman start) + data freshness. "started" and the
     // run-elapsed only appear when a run is present (run_started_at set); else just freshness.
     const runT = parseTs(s.run_started_at);
     const startStr = isNaN(runT) ? "" : "started " + localTs(s.run_started_at).slice(0,16) + " · ";
     const runStr   = isNaN(runT) ? "" : "run " + durStr((now-runT)/1000) + " · ";
-    $("ago").textContent = startStr + runStr + (s.updated_at ? "updated " + agoStr(s.updated_at) : "—");
+    const beatIso  = s.last_beat || s.updated_at;   // liveness signal (fallback for pre-last_beat rows)
+    $("ago").textContent = startStr + runStr + (beatIso ? "beat " + agoStr(beatIso) : "—");
     // runtime = elapsed in the CURRENT phase (updated_at advances at each phase). The worker
     // phase also carries a watchdog (timeout_sec>0) -> append "/ <cap> · kills in"; the gate /
     // commit / challenge phases have no watchdog, so show the elapsed alone.
@@ -236,17 +239,27 @@ function renderSelected(){
         $("kills").textContent = durStrS(el);   // gate / commit / challenge: elapsed, no watchdog
       }
     } else { $("kills").textContent = "—"; }
-    // BEAT-LIVENESS (network-hole handling): the foreman beats updated_at every ~25s for the WHOLE run.
-    // If it reads 'running' but no beat has landed for BEAT_STALE_SEC (several missed beats), it is NOT
-    // confirmed live — the process died without marking 'crashed' (e.g. a tree-kill that took the beater
-    // too) or the relay/network dropped. Flag amber 'no signal' rather than a green 'running', in ANY
-    // phase (the timeout-based OVERDUE above only covers the worker phase).
-    const BEAT_STALE_SEC = 90;
-    if (s.state === "running" && !isNaN(upd) && (now-upd)/1000 > BEAT_STALE_SEC){
+    // LAST HEARTBEAT + BEAT-LIVENESS. The foreman beats last_beat every ~25s for the WHOLE run
+    // (separate from updated_at, which moves only on a real phase change — so runtime above is the
+    // phase's true elapsed, not reset by beats). Show the beat age, and while running color it:
+    // fresh (<40s) green, stale (40-90s) amber, no-signal (>90s = several missed beats) red — the
+    // process died without marking 'crashed' (a tree-kill that took the beater too) or the relay/
+    // network dropped. The timeout-based OVERDUE above only covers the worker phase.
+    const BEAT_FRESH_SEC = 40, BEAT_STALE_SEC = 90;
+    const beat = parseTs(s.last_beat || s.updated_at);
+    if (s.state === "running" && !isNaN(beat)){
+      const bs = (now-beat)/1000;
+      $("lastBeat").textContent = agoStr(s.last_beat || s.updated_at);
+      $("lastBeat").style.color = bs > BEAT_STALE_SEC ? "var(--bad)" : (bs > BEAT_FRESH_SEC ? "var(--warn)" : "var(--ok)");
+    } else if (!isNaN(beat)){
+      $("lastBeat").textContent = agoStr(s.last_beat || s.updated_at);   // not running: informational, no alarm color
+      $("lastBeat").style.color = "";
+    } else { $("lastBeat").textContent = "—"; $("lastBeat").style.color = ""; }
+    if (s.state === "running" && !isNaN(beat) && (now-beat)/1000 > BEAT_STALE_SEC){
       $("dot").style.background = $("state").style.color = "var(--warn)";
       $("state").textContent = "no signal";
       $("overdue").hidden = false;
-      $("overdue").textContent = "⚠ No heartbeat for " + agoStr(s.updated_at).replace(" ago","")
+      $("overdue").textContent = "⚠ No heartbeat for " + agoStr(s.last_beat || s.updated_at).replace(" ago","")
         + " (foreman beats ~every 25s). It is down or the relay/PC is offline — verify from the PC.";
     }
     // token usage (cumulative for THIS run) + a rough cost estimate. Opus 4.8 $/M: input 5, output 25,
@@ -266,7 +279,8 @@ function renderSelected(){
   } else {
     $("state").textContent = lastStatus.length ? "select an instance" : "no status yet";
     $("dot").style.background = "var(--mut)"; $("state").style.color = "";
-    $("batch").textContent = $("item").textContent = $("pending").textContent = $("kills").textContent = $("tokens").textContent = $("activity").textContent = $("activitySince").textContent = "—";
+    $("batch").textContent = $("item").textContent = $("pending").textContent = $("kills").textContent = $("tokens").textContent = $("activity").textContent = $("activitySince").textContent = $("lastBeat").textContent = "—";
+    $("lastBeat").style.color = "";
     $("ago").textContent = lastStatus.length ? "—" : "foreman has not reported";
   }
   $("command").textContent = c.command || "none";

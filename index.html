@@ -72,13 +72,18 @@
       <div class="state" id="state">—</div>
       <div class="muted" id="ago">not connected</div>
       <hr style="border:0;border-top:1px solid var(--line);margin:10px 0">
-      <div class="row"><span class="k">batch</span><span class="v" id="batch">—</span></div>
+      <!-- NOW: what the run is doing this moment -->
+      <div class="row"><span class="k">item</span><span class="v" id="item">—</span></div>
       <div class="row"><span class="k">activity</span><span class="v" id="activity">—</span></div>
       <div class="row"><span class="k">activity since</span><span class="v" id="activitySince">—</span></div>
       <div class="row"><span class="k">runtime</span><span class="v" id="kills">—</span></div>
-      <div class="row"><span class="k">tokens</span><span class="v" id="tokens">—</span></div>
-      <div class="row"><span class="k">item</span><span class="v" id="item">—</span></div>
+      <hr style="border:0;border-top:1px solid var(--line);margin:8px 0;opacity:.45">
+      <!-- RUN SO FAR: progress through the queue + accumulated cost -->
+      <div class="row"><span class="k">cycle</span><span class="v" id="batch">—</span></div>
       <div class="row"><span class="k">pending</span><span class="v" id="pending">—</span></div>
+      <div class="row"><span class="k">tokens</span><span class="v" id="tokens">—</span></div>
+      <hr style="border:0;border-top:1px solid var(--line);margin:8px 0;opacity:.45">
+      <!-- CONTROL: the remote command and its acknowledgement -->
       <div class="row"><span class="k">command</span><span class="v" id="command">—</span></div>
       <div class="row"><span class="k">command acknowledged</span><span class="v" id="ack">—</span></div>
     </div>
@@ -224,7 +229,7 @@ function renderSelected(){
         } else {
           $("kills").textContent = durStrS(el) + " / " + durStr(to) + " · OVERDUE by " + durStr(-rem);
           $("overdue").hidden = false;
-          $("overdue").textContent = "⚠ No update " + durStr(-rem) + " past this batch's timeout. "
+          $("overdue").textContent = "⚠ No update " + durStr(-rem) + " past this cycle's timeout. "
             + "The foreman may be stuck, or the relay/PC is offline — stop it from the PC (GUI), not just here.";
         }
       } else {
@@ -352,7 +357,7 @@ async function itemCmd(item, action){
 async function setControl(cmd){
   const id = selInst();
   if (!id){ log("pick an instance first", true); return; }
-  if (cmd==="stop" && !confirm("Stop the foreman ('"+id+"') after the current batch?")) return;
+  if (cmd==="stop" && !confirm("Stop the foreman ('"+id+"') after the current cycle?")) return;
   try{
     await pipeline(
       "INSERT INTO foreman_control(id,command,requested_at,requested_by,ack_at) "+

@@ -44,6 +44,8 @@
   .srow { padding:6px 2px; border-bottom:1px solid var(--line); font-size:13.5px; line-height:1.4; }
   .s-done{ color:var(--ok); } .s-pending{ color:var(--mut); }
   .s-blocked,.s-escalated{ color:var(--bad); } .s-partial{ color:var(--warn); } .s-wontfix{ color:var(--mut); } .s-parked{ color:var(--warn); }
+  .s-decomposed{ color:var(--accent); }   /* a CONTAINER — its work is its child sub-items */
+  .qchild{ border-left:2px solid var(--line); }   /* decomposition child — indented under its parent (margin per depth) */
   .s-running{ color:var(--ok); } .q-run{ border-left:3px solid var(--ok); padding-left:8px; }
   .q-dim{ opacity:.45; }   /* wontfix: a closed decision — recedes */
   .overdue { background:var(--bad); color:#fff; padding:9px 11px; border-radius:8px;
@@ -318,8 +320,10 @@ function renderQueue(){
     if (i.status === "pending")      btn = `<button class="qbtn" onclick="itemCmd('${esc(i.id)}','skip')">Skip</button>`;
     else if (i.status === "parked")  btn = `<button class="qbtn react" onclick="itemCmd('${esc(i.id)}','reactivate')">Reactivate</button>`;
     const working = i.id && i.id === runId;   // status stays 'pending'; shown as ▶ working
-    const rowcls = working ? " q-run" : (i.status === "wontfix" ? " q-dim" : "");
-    return `<div class="qitem${rowcls}"><div class="qhead">`+
+    const depth = Number(i.depth)||0;         // decomposition child depth (0 = top-level)
+    const rowcls = (working ? " q-run" : (i.status === "wontfix" ? " q-dim" : "")) + (depth>0 ? " qchild" : "");
+    const indent = depth>0 ? ` style="margin-left:${depth*16}px"` : "";
+    return `<div class="qitem${rowcls}"${indent}><div class="qhead">`+
       `<span class="qst ${working?'s-running':'s-'+esc(i.status)}">${working?'▶ working':esc(i.status)}</span>`+
       `<b>${esc(i.id)}</b><span class="muted">${esc(i.ledger||"")}</span>${btn}</div>`+
       `<div class="qtitle" title="${esc(i.title||"")}">${esc(i.title||"")}</div></div>`;

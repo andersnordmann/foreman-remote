@@ -178,7 +178,8 @@ async function pipeline(sql, args){
 function arg(v){ return { type:"text", value:String(v) }; }
 
 const COLORS = { running:"var(--ok)","idle":"var(--accent)", done:"var(--accent)",
-  "paused-remote":"var(--warn)","paused-review":"var(--warn)", "stopped-remote":"var(--bad)",
+  "paused-remote":"var(--warn)","paused-review":"var(--warn)","paused-rate-limit":"var(--warn)",
+  "relay-degraded":"var(--warn)", "stopped-remote":"var(--bad)",
   stopped:"var(--bad)", crashed:"var(--bad)", error:"var(--bad)" };
 
 let lastStatus = [], lastControl = [], lastQueue = [];   // cached rows, so an instance switch re-renders without a round-trip

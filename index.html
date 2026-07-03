@@ -83,6 +83,7 @@
       <div class="row"><span class="k">cycle</span><span class="v" id="batch">—</span></div>
       <div class="row"><span class="k">pending items</span><span class="v" id="pending">—</span></div>
       <div class="row"><span class="k">tokens</span><span class="v" id="tokens">—</span></div>
+      <div class="row"><span class="k">by model</span><span class="v" id="byModel">—</span></div>
       <hr style="border:0;border-top:1px solid var(--line);margin:8px 0;opacity:.45">
       <!-- CONTROL: the remote command and its acknowledgement -->
       <div class="row"><span class="k">command</span><span class="v" id="command">—</span></div>
@@ -255,24 +256,39 @@ function renderSelected(){
       $("overdue").textContent = "⚠ No heartbeat for " + agoStr(s.last_beat || s.updated_at).replace(" ago","")
         + " (foreman beats ~every 25s). It is down or the relay/PC is offline — verify from the PC.";
     }
-    // token usage (cumulative for THIS run) + a rough cost estimate. Opus 4.8 $/M: input 5, output 25,
-    // cache-read 0.5 (0.1x), cache-write 6.25 (1.25x, 5m ephemeral). Pricing cache-reads at the base
-    // input rate would overstate cost ~10x on the cached portion — the split is what makes it honest.
-    // UPPER bound still: the Sonnet challenger is cheaper and intro pricing lowers it further.
+    // token usage (cumulative for THIS run). input = fresh prompt tokens; cached = reused context
+    // (~10x cheaper); output = generated. COST is the foreman's per-model-priced figure (cost_est),
+    // labelled "API-equiv": on a subscription it's notional (what it WOULD cost on the pay-as-you-go
+    // API), not billed per token. Falls back to an Opus-rate estimate for pre-cost_est rows.
     const tin = Number(s.tokens_in)||0, tout = Number(s.tokens_out)||0;
     const tcr = Number(s.tokens_cache_read)||0, tcw = Number(s.tokens_cache_write)||0;
     const hasSplit = tcr > 0 || tcw > 0;   // false for pre-split runs (only lumped tokens_in)
-    const est = (hasSplit ? (tin/1e6*5 + tcr/1e6*0.5 + tcw/1e6*6.25 + tout/1e6*25)
-                          : (tin/1e6*5 + tout/1e6*25)).toFixed(2);   // lumped 'in' priced at base = over-estimate
+    const costEst = Number(s.cost_est)||0;
+    const cost = (costEst > 0 ? costEst
+                 : (hasSplit ? (tin/1e6*5 + tcr/1e6*0.5 + tcw/1e6*6.25 + tout/1e6*25)
+                             : (tin/1e6*5 + tout/1e6*25))).toFixed(2);
     $("tokens").textContent = (tin || tout || tcr || tcw)
       ? (hasSplit
-          ? fmtTok(tin) + " in + " + fmtTok(tcr) + " cache · " + fmtTok(tout) + " out · ~$" + est + " est"
-          : fmtTok(tin) + " in / " + fmtTok(tout) + " out · ~$" + est + " est")
+          ? fmtTok(tin) + " input + " + fmtTok(tcr) + " cached · " + fmtTok(tout) + " output · ≈ $" + cost + " API-equiv"
+          : fmtTok(tin) + " input / " + fmtTok(tout) + " output · ≈ $" + cost + " API-equiv")
       : "—";
+    // per-model breakdown (total tokens per model) — shown once >1 model has run (e.g. a challenger),
+    // so the per-model tracking behind the cost is visible; hidden for a worker-only run.
+    let byModel = "—";
+    try {
+      const bm = s.tokens_by_model ? JSON.parse(s.tokens_by_model) : {};
+      const models = Object.keys(bm);
+      if (models.length >= 2)
+        byModel = models.map(m => {
+          const t = bm[m]||{}, tot = (t.in||0)+(t.cread||0)+(t.cwrite||0)+(t.out||0);
+          return m.replace(/^claude-/,"") + ": " + fmtTok(tot);
+        }).join(" · ");
+    } catch (e) {}
+    $("byModel").textContent = byModel;
   } else {
     $("state").textContent = lastStatus.length ? "select an instance" : "no status yet";
     $("dot").style.background = "var(--mut)"; $("state").style.color = "";
-    $("batch").textContent = $("item").textContent = $("pending").textContent = $("kills").textContent = $("tokens").textContent = $("activity").textContent = $("activitySince").textContent = "—";
+    $("batch").textContent = $("item").textContent = $("pending").textContent = $("kills").textContent = $("tokens").textContent = $("byModel").textContent = $("activity").textContent = $("activitySince").textContent = "—";
     $("ago").textContent = lastStatus.length ? "—" : "foreman has not reported";
   }
   $("command").textContent = c.command || "none";

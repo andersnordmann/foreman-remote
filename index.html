@@ -219,7 +219,10 @@ function renderSelected(){
     // appear when a run is present (run_started_at set); else just the beat.
     const runT = parseTs(s.run_started_at);
     const startStr = isNaN(runT) ? "" : "started " + localTs(s.run_started_at).slice(0,16) + " · ";
-    const runStr   = isNaN(runT) ? "" : "run " + durStr((now-runT)/1000) + " · ";
+    // FREEZE when not running: end the "run" total at the last beat, not the live clock, so a
+    // stopped / done / crashed run shows its final length instead of ticking up forever.
+    const endT     = (s.state === "running") ? now : (parseTs(s.last_beat) || now);
+    const runStr   = isNaN(runT) ? "" : "run " + durStr(Math.max(0,(endT-runT))/1000) + " · ";
     const beatIso  = s.last_beat || s.updated_at;   // liveness signal (fallback for pre-last_beat rows)
     $("ago").textContent = startStr + runStr + (beatIso ? "beat " + agoStr(beatIso) : "—");
     // runtime = elapsed in the CURRENT phase (updated_at advances at each phase). The worker

@@ -53,6 +53,8 @@
   .qbtn { margin-left:auto; border:1px solid var(--line); background:#21262d; color:var(--fg);
           border-radius:7px; padding:5px 10px; font-size:12px; font-weight:600; }
   .qbtn.react { border-color:var(--ok); color:var(--ok); }
+  .ncheck { display:flex; align-items:center; gap:9px; color:var(--fg); font-size:14px; margin:7px 0; cursor:pointer; }
+  .ncheck input { width:auto; margin:0; }
 </style>
 </head>
 <body>
@@ -116,6 +118,24 @@
     </div>
   </div>
 
+  <details class="card" id="notifCard">
+    <summary>Notifications (this device)</summary>
+    <div class="muted" id="notifStatus" style="margin:8px 0">checking…</div>
+    <div class="btns" style="grid-template-columns:1fr 1fr">
+      <button class="b-resume" onclick="enableNotifs()">Enable</button>
+      <button class="b-ghost" onclick="disableNotifs()">Disable</button>
+    </div>
+    <label style="margin-top:12px">Notify me about</label>
+    <div id="notifPrefs">
+      <label class="ncheck"><input type="checkbox" data-ev="done"> Run complete</label>
+      <label class="ncheck"><input type="checkbox" data-ev="attention"> Needs attention (a task escalated)</label>
+      <label class="ncheck"><input type="checkbox" data-ev="paused"> Auto-paused (e.g. rate limit)</label>
+      <label class="ncheck"><input type="checkbox" data-ev="item"> Each item shipped</label>
+      <label class="ncheck"><input type="checkbox" data-ev="activity"> Activity changes (noisy)</label>
+    </div>
+    <p class="muted">Push arrives even with this page closed. On iPhone, first use Share &rarr; <b>Add to Home Screen</b>, then open from that icon. Each event is also gated by the foreman's own settings, and a crashed run can't send its own alert (the status still flips to “no signal”).</p>
+  </details>
+
   <details class="card">
     <summary>Connection (stored only on this device)</summary>
     <label>Sync URL</label>
@@ -135,6 +155,8 @@
 "use strict";
 const $ = id => document.getElementById(id);
 const LS_URL = "foreman_sync_url", LS_TOK = "foreman_token", LS_INST = "foreman_instance";
+const LS_NOTIF = "foreman_notif_prefs";   // per-device push event prefs (JSON {done,attention,item,activity})
+const NOTIF_DEFAULTS = { done: true, attention: true, paused: true, item: false, activity: false };
 let timer = null;
 const esc = s => String(s==null?"":s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function showTab(name){
@@ -423,10 +445,113 @@ async function setControl(cmd){
 function saveCreds(){
   localStorage.setItem(LS_URL, $("syncUrl").value.trim());
   localStorage.setItem(LS_TOK, $("token").value.trim());
-  log("connection saved"); refresh();
+  log("connection saved"); refresh(); sendCfgToSW();   // service worker needs the creds to read state on a push
 }
 function clearCreds(){ localStorage.removeItem(LS_URL); localStorage.removeItem(LS_TOK);
   $("syncUrl").value=""; $("token").value=""; log("connection cleared"); }
+
+// ---- Web Push notifications (arrive with the page CLOSED) --------------------------------------
+// The phone SUBSCRIBES here (permission + push subscription written to Turso); the FOREMAN sends
+// payload-less pushes; the service worker (sw.js) reads state from Turso and shows them. This block
+// is the per-device half of the setup — the foreman's config.notify is the other (master) half.
+const notifSupported = ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
+function getPrefs(){ try { return Object.assign({}, NOTIF_DEFAULTS, JSON.parse(localStorage.getItem(LS_NOTIF)||"{}")); } catch(e){ return Object.assign({}, NOTIF_DEFAULTS); } }
+function setPrefs(p){ localStorage.setItem(LS_NOTIF, JSON.stringify(p)); }
+function enabledEvents(p){ return Object.keys(p).filter(k => p[k]); }
+function pageBaseUrl(){ return location.origin + location.pathname; }
+function urlB64ToUint8Array(b64){
+  const pad = "=".repeat((4 - b64.length % 4) % 4);
+  const s = (b64 + pad).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(s); const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+// Hand the service worker our Turso creds + this page's URL so a closed-page push can read state
+// and knows which page to open. Re-sent on load and whenever creds change.
+async function sendCfgToSW(){
+  if (!notifSupported) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const c = creds();
+    (reg.active || navigator.serviceWorker.controller || {}).postMessage &&
+      (reg.active || navigator.serviceWorker.controller).postMessage(
+        { type: "cfg", syncUrl: c.url, token: c.tok, pageUrl: pageBaseUrl() });
+  } catch(e){}
+}
+async function currentSub(){
+  if (!notifSupported) return null;
+  try { const reg = await navigator.serviceWorker.ready; return await reg.pushManager.getSubscription(); }
+  catch(e){ return null; }
+}
+async function updateNotifStatus(){
+  const el = $("notifStatus"); if (!el) return;
+  if (!notifSupported){ el.textContent = "This browser can't do push notifications."; return; }
+  const perm = Notification.permission;
+  const sub = await currentSub();
+  if (sub) el.textContent = "On — this device is subscribed.";
+  else if (perm === "denied") el.textContent = "Blocked in browser settings — allow notifications, then Enable.";
+  else el.textContent = "Off — tap Enable to get pushes with the page closed.";
+}
+function renderNotifPrefs(){
+  const p = getPrefs();
+  for (const cb of document.querySelectorAll("#notifPrefs input[data-ev]")){
+    cb.checked = !!p[cb.dataset.ev];
+    cb.onchange = async () => {
+      const cur = getPrefs(); cur[cb.dataset.ev] = cb.checked; setPrefs(cur);
+      await writeSubPrefs();   // push the new prefs to the subscription row (if subscribed)
+    };
+  }
+}
+// Write this device's subscription (or just its prefs) into foreman_push_sub.
+async function upsertSub(sub){
+  const j = sub.toJSON(); const keys = j.keys || {};
+  await pipeline(
+    "INSERT INTO foreman_push_sub(endpoint,p256dh,auth,prefs,instance,ua,created_at) VALUES(?,?,?,?,?,?,?) "+
+    "ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth, prefs=excluded.prefs, "+
+    "instance=excluded.instance, ua=excluded.ua",
+    [arg(sub.endpoint), arg(keys.p256dh||""), arg(keys.auth||""),
+     arg(JSON.stringify(enabledEvents(getPrefs()))), arg(""),   // instance '' = notify for any run this DB tracks
+     arg((navigator.userAgent||"").slice(0,120)), arg(new Date().toISOString())]);
+}
+async function writeSubPrefs(){
+  const sub = await currentSub(); if (!sub) return;
+  try { await pipeline("UPDATE foreman_push_sub SET prefs=? WHERE endpoint=?",
+                       [arg(JSON.stringify(enabledEvents(getPrefs()))), arg(sub.endpoint)]);
+        log("notification prefs saved"); }
+  catch(e){ log("saving prefs failed: "+e.message, true); }
+}
+async function enableNotifs(){
+  if (!notifSupported){ log("push not supported on this browser", true); await updateNotifStatus(); return; }
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted"){ log("notification permission not granted", true); await updateNotifStatus(); return; }
+    await navigator.serviceWorker.register("sw.js");
+    const reg = await navigator.serviceWorker.ready;
+    // The foreman publishes its VAPID public key to Turso (foreman_push_cfg) on start.
+    let pub = "";
+    try { const r = await pipeline("SELECT v FROM foreman_push_cfg WHERE k='vapid_public'"); pub = r.length ? r[0].v : ""; }
+    catch(e){ pub = ""; }
+    if (!pub){ log("the foreman hasn't published a push key yet — start it once with notifications enabled", true);
+               $("notifStatus").textContent = "Waiting for the foreman to publish its push key."; return; }
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8Array(pub) });
+    await upsertSub(sub);
+    await sendCfgToSW();
+    log("notifications enabled on this device");
+  } catch(e){ log("enable notifications failed: "+e.message, true); }
+  await updateNotifStatus();
+}
+async function disableNotifs(){
+  try {
+    const sub = await currentSub();
+    if (sub){
+      try { await pipeline("DELETE FROM foreman_push_sub WHERE endpoint=?", [arg(sub.endpoint)]); } catch(e){}
+      await sub.unsubscribe();
+      log("notifications disabled on this device");
+    }
+  } catch(e){ log("disable failed: "+e.message, true); }
+  await updateNotifStatus();
+}
 
 function startPolling(){ if (!timer) timer = setInterval(refresh, 10000); }   // auto-refresh every 10s
 function stopPolling(){ if (timer){ clearInterval(timer); timer = null; } }
@@ -437,10 +562,33 @@ document.addEventListener("visibilitychange", ()=>{
   if (document.hidden) stopPolling();
   else { refresh(); startPolling(); }
 });
+// A notification tap (from the service worker) opens ?instance=<id> or focuses this page and posts
+// which instance to show — honor both so the tap lands on the run that fired the event.
+function selectInstance(id){
+  if (!id) return;
+  localStorage.setItem(LS_INST, id);
+  if ($("instance")) $("instance").value = id;
+  showTab("status"); renderSelected(); renderQueue(); renderStory();
+}
 (function init(){
+  const qInst = new URLSearchParams(location.search).get("instance");
+  if (qInst) localStorage.setItem(LS_INST, qInst);   // opened from a notification -> preselect that run
   const c = creds(); $("syncUrl").value = c.url; if (c.tok) $("token").value = c.tok;
   refresh();
   startPolling();
+  // Notifications: render this device's prefs, reflect subscription state, and make sure the service
+  // worker is registered + has the creds (so an EXISTING subscription keeps working across reloads).
+  if (notifSupported){
+    renderNotifPrefs();
+    navigator.serviceWorker.register("sw.js").then(sendCfgToSW).catch(()=>{});
+    navigator.serviceWorker.addEventListener("message", (e)=>{
+      const d = e.data || {};
+      if (d.type === "select-instance") selectInstance(d.instance);
+    });
+    updateNotifStatus();
+  } else {
+    const el = $("notifStatus"); if (el) el.textContent = "This browser can't do push notifications.";
+  }
 })();
 </script>
 </body>

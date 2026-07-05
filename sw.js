@@ -126,31 +126,35 @@ function messageFor(row) {
 }
 
 self.addEventListener("push", (e) => {
-  // ALWAYS end in showNotification (iOS silent-push rule). Enrichment from Turso is best-effort.
+  // ALWAYS end in showNotification (iOS silent-push rule). ORDER MATTERS: show a notification
+  // IMMEDIATELY, THEN best-effort enrich it from Turso (same tag = update in place). Doing the
+  // network fetch BEFORE the first showNotification risked the SW being killed mid-fetch on a
+  // browser with a short push budget -> zero notification. Also ping any open page (diagnostic:
+  // proves the push reached the SW even if the OS doesn't display the notification).
+  const TAG = "foreman";
   e.waitUntil((async () => {
     const cfg = await cacheGet(CFG_KEY);
-    let title = "claude-foreman", body = "Update — tap to open", instance = "", pageUrl = (cfg && cfg.pageUrl) || "./";
-    if (cfg && cfg.syncUrl && cfg.token) {
+    const pageUrl = (cfg && cfg.pageUrl) || "./";
+    const showN = (title, body, instance) => {
+      const url = pageUrl + (instance ? ((pageUrl.indexOf("?") >= 0 ? "&" : "?") + "instance=" + encodeURIComponent(instance)) : "");
+      return self.registration.showNotification(title, { body, tag: TAG, renotify: true, data: { url, instance } });
+    };
+    try {
+      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const c of clients) c.postMessage({ type: "push-received", at: Date.now() });
+    } catch (err) { /* ignore */ }
+    await showN("claude-foreman", "Update — tap to open", "");   // GUARANTEED first, before any await on the network
+    if (cfg && cfg.syncUrl && cfg.token) {                       // enrich in place (best-effort)
       const rows = await tursoQuery(cfg, "SELECT id, updated_at, state, batch, last_item, last_result, pending, push_event, story FROM foreman_status");
       if (rows) {
         const seen = (await cacheGet(SEEN_KEY)) || {};
         const row = pickChanged(rows, seen);
-        if (row) {
-          const m = messageFor(row);
-          title = m.title; body = m.body; instance = m.instance;
-        }
+        if (row) { const m = messageFor(row); await showN(m.title, m.body, m.instance); }
         const snap = {};
         for (const r of rows) snap[r.id] = { updated_at: r.updated_at, state: r.state, last_result: r.last_result, push_event: r.push_event };
         await cachePut(SEEN_KEY, snap);
       }
     }
-    const url = pageUrl + (instance ? ((pageUrl.indexOf("?") >= 0 ? "&" : "?") + "instance=" + encodeURIComponent(instance)) : "");
-    await self.registration.showNotification(title, {
-      body,
-      tag: "foreman-" + (instance || "run"),   // collapse repeats for the same run into one
-      renotify: true,
-      data: { url, instance },
-    });
   })());
 });
 

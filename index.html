@@ -24,6 +24,7 @@
   .btns { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:6px; }
   button { border:0; border-radius:10px; padding:13px 10px; font-size:15px; font-weight:600; color:#fff; }
   button:active { transform:translateY(1px); }
+  button:disabled { opacity:.4; cursor:default; transform:none; }   /* state-aware: inert action dims */
   .b-pause{ background:var(--warn); } .b-resume{ background:var(--ok); } .b-stop{ background:var(--bad); }
   .b-ghost{ background:#21262d; color:var(--fg); border:1px solid var(--line); }
   .full { width:100%; margin-top:8px; }
@@ -122,8 +123,8 @@
     <summary>Notifications (this device)</summary>
     <div class="muted" id="notifStatus" style="margin:8px 0">checking…</div>
     <div class="btns" style="grid-template-columns:1fr 1fr">
-      <button class="b-resume" onclick="enableNotifs()">Enable</button>
-      <button class="b-ghost" onclick="disableNotifs()">Disable</button>
+      <button class="b-resume" id="notifEnableBtn" onclick="enableNotifs()">Enable</button>
+      <button class="b-ghost" id="notifDisableBtn" onclick="disableNotifs()">Disable</button>
     </div>
     <label style="margin-top:12px">Notify me about</label>
     <div id="notifPrefs">
@@ -485,12 +486,17 @@ async function currentSub(){
 }
 async function updateNotifStatus(){
   const el = $("notifStatus"); if (!el) return;
-  if (!notifSupported){ el.textContent = "This browser can't do push notifications."; return; }
+  const en = $("notifEnableBtn"), dis = $("notifDisableBtn");
+  const setBtns = (enableOn, disableOn) => { if (en) en.disabled = !enableOn; if (dis) dis.disabled = !disableOn; };
+  if (!notifSupported){ el.textContent = "This browser can't do push notifications."; setBtns(false, false); return; }
   const perm = Notification.permission;
   const sub = await currentSub();
-  if (sub) el.textContent = "On — this device is subscribed.";
-  else if (perm === "denied") el.textContent = "Blocked in browser settings — allow notifications, then Enable.";
-  else el.textContent = "Off — tap Enable to get pushes with the page closed.";
+  // Buttons are state-aware (also correct after a reload, since the subscription persists): when
+  // subscribed, Enable is inert and Disable is the live action; when off, the reverse; when blocked,
+  // neither works from the page (fix it in browser settings first).
+  if (sub) { el.textContent = "On — this device is subscribed."; setBtns(false, true); }
+  else if (perm === "denied") { el.textContent = "Blocked in browser settings — allow notifications, then Enable."; setBtns(false, false); }
+  else { el.textContent = "Off — tap Enable to get pushes with the page closed."; setBtns(true, false); }
 }
 function renderNotifPrefs(){
   const p = getPrefs();

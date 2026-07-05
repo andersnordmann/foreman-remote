@@ -24,7 +24,7 @@
   .btns { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:6px; }
   button { border:0; border-radius:10px; padding:13px 10px; font-size:15px; font-weight:600; color:#fff; }
   button:active { transform:translateY(1px); }
-  button:disabled { opacity:.4; cursor:default; transform:none; }   /* state-aware: inert action dims */
+  button:disabled { opacity:.45; cursor:default; transform:none; }   /* state-aware: the INERT button dims but KEEPS its colour (green=Enable-family, red=Disable-family). The bright button is always the live action; labels flip Enable<->Enabled / Disable<->Disabled to reinforce it. */
   .b-pause{ background:var(--warn); } .b-resume{ background:var(--ok); } .b-stop{ background:var(--bad); }
   .b-ghost{ background:#21262d; color:var(--fg); border:1px solid var(--line); }
   .full { width:100%; margin-top:8px; }
@@ -97,9 +97,9 @@
 
     <div class="card">
       <div class="btns">
-        <button class="b-pause"  onclick="setControl('pause')">Pause</button>
-        <button class="b-resume" onclick="setControl('resume')">Resume</button>
-        <button class="b-stop"   onclick="setControl('stop')">Stop</button>
+        <button class="b-pause"  id="pauseBtn"  onclick="setControl('pause')">Pause</button>
+        <button class="b-resume" id="resumeBtn" onclick="setControl('resume')">Resume</button>
+        <button class="b-stop"   id="stopBtn"   onclick="setControl('stop')">Stop</button>
       </div>
       <button class="b-ghost full" onclick="refresh()">Refresh now</button>
     </div>
@@ -124,7 +124,7 @@
     <div class="muted" id="notifStatus" style="margin:8px 0">checking…</div>
     <div class="btns" style="grid-template-columns:1fr 1fr">
       <button class="b-resume" id="notifEnableBtn" onclick="enableNotifs()">Enable</button>
-      <button class="b-ghost" id="notifDisableBtn" onclick="disableNotifs()">Disable</button>
+      <button class="b-stop" id="notifDisableBtn" onclick="disableNotifs()">Disable</button>
     </div>
     <label style="margin-top:12px">Notify me about</label>
     <div id="notifPrefs">
@@ -220,6 +220,20 @@ function populateInstances(){
     : "<option>(no foreman reporting)</option>";
 }
 
+// State-aware run controls (same idea as the notify buttons): the BRIGHT (pressable) button is the
+// live action; the rest dim to show the current state can't use them. Pause: only while alive & not
+// already paused. Resume: only while paused. Stop: whenever the foreman is alive. All dim when the run
+// is stopped/done/crashed or there's no status (nothing to control).
+function setControlBtns(state){
+  const P=$("pauseBtn"), R=$("resumeBtn"), S=$("stopBtn");
+  const st = state || "";
+  const paused = st.indexOf("paused") === 0;                 // paused-remote / -review / -rate-limit
+  const dead   = /^(stopped|crashed|error|done)/.test(st);   // terminal: the loop is not running
+  const alive  = !!st && !dead;                              // running / idle / relay-degraded / paused-*
+  if (P) P.disabled = !(alive && !paused);
+  if (R) R.disabled = !paused;
+  if (S) S.disabled = !alive;
+}
 function renderSelected(){
   const id = selInst();
   const s = lastStatus.find(r => r.id === id);
@@ -322,6 +336,7 @@ function renderSelected(){
   }
   $("command").textContent = c.command || "none";
   $("ack").textContent = c.ack_at ? localTs(c.ack_at) : "—";   // local time, not raw Zulu
+  setControlBtns(s ? s.state : "");   // state-aware run controls: bright = the live action, dim = inert
 }
 
 function onInstanceChange(){ localStorage.setItem(LS_INST, $("instance").value); renderSelected(); renderQueue(); }
@@ -491,9 +506,11 @@ async function updateNotifStatus(){
   if (!notifSupported){ el.textContent = "This browser can't do push notifications."; setBtns(false, false); return; }
   const perm = Notification.permission;
   const sub = await currentSub();
-  // Buttons are state-aware (also correct after a reload, since the subscription persists): when
-  // subscribed, Enable is inert and Disable is the live action; when off, the reverse; when blocked,
-  // neither works from the page (fix it in browser settings first).
+  // State-aware: the BRIGHT (pressable) button is the live action (imperative label Enable / Disable);
+  // the DIMMED button shows the current state (past-tense Enabled / Disabled). Correct after a reload
+  // since the subscription persists; when blocked, neither works from the page (fix browser settings).
+  if (en)  en.textContent  = sub ? "Enabled" : "Enable";
+  if (dis) dis.textContent = sub ? "Disable" : "Disabled";
   if (sub) { el.textContent = "On — this device is subscribed."; setBtns(false, true); }
   else if (perm === "denied") { el.textContent = "Blocked in browser settings — allow notifications, then Enable."; setBtns(false, false); }
   else { el.textContent = "Off — tap Enable to get pushes with the page closed."; setBtns(true, false); }

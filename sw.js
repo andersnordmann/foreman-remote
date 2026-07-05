@@ -149,7 +149,7 @@ self.addEventListener("push", (e) => {
       if (rows) {
         const seen = (await cacheGet(SEEN_KEY)) || {};
         const row = pickChanged(rows, seen);
-        if (row) { const m = messageFor(row); await showN(m.title, m.body, m.instance); }
+        if (row) { const m = messageFor(row); await showN("claude-foreman · " + m.title, m.body, m.instance); }
         const snap = {};
         for (const r of rows) snap[r.id] = { updated_at: r.updated_at, state: r.state, last_result: r.last_result, push_event: r.push_event };
         await cachePut(SEEN_KEY, snap);

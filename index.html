@@ -327,8 +327,9 @@ function renderSelected(){
       $("overdue").textContent = "⚠ No heartbeat for " + agoStr(s.last_beat || s.updated_at).replace(" ago","")
         + " (foreman beats ~every 25s). It is down or the relay/PC is offline — verify from the PC.";
     }
-    // token usage (cumulative for THIS run). input = fresh prompt tokens; cached = reused context
-    // (~10x cheaper); output = generated. COST is the foreman's per-model-priced figure (cost_est),
+    // token usage (cumulative for THIS run). input = fresh prompt tokens; cached = context tokens
+    // (cache READ + WRITE, so input+cached+output reconciles with the by-model total); output = generated.
+    // COST is the foreman's per-model-priced figure (cost_est) — read/write/output priced separately below,
     // labelled "API-equiv": on a subscription it's notional (what it WOULD cost on the pay-as-you-go
     // API), not billed per token. Falls back to an Opus-rate estimate for pre-cost_est rows.
     const tin = Number(s.tokens_in)||0, tout = Number(s.tokens_out)||0;
@@ -340,7 +341,7 @@ function renderSelected(){
                              : (tin/1e6*5 + tout/1e6*25))).toFixed(2);
     $("tokens").textContent = (tin || tout || tcr || tcw)
       ? (hasSplit
-          ? fmtTok(tin) + " input + " + fmtTok(tcr) + " cached · " + fmtTok(tout) + " output · ≈ $" + cost + " API-equiv"
+          ? fmtTok(tin) + " input + " + fmtTok(tcr + tcw) + " cached · " + fmtTok(tout) + " output · ≈ $" + cost + " API-equiv"
           : fmtTok(tin) + " input / " + fmtTok(tout) + " output · ≈ $" + cost + " API-equiv")
       : "—";
     // per-model breakdown (total tokens per model) — shown once >1 model has run (e.g. a challenger),
@@ -488,7 +489,7 @@ async function itemCmd(item, action){
 async function setControl(cmd){
   const id = selInst();
   if (!id){ log("pick an instance first", true); return; }
-  if (cmd==="stop" && !confirm("Stop the foreman ('"+id+"') after the current cycle?")) return;
+  if (cmd==="stop" && !confirm("Stop the foreman ('"+id+"')? The current worker/challenger is killed immediately and its unfinished work is discarded (not committed); the run then halts.")) return;
   try{
     await pipeline(
       "INSERT INTO foreman_control(id,command,requested_at,requested_by,ack_at) "+

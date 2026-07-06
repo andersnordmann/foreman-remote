@@ -607,7 +607,9 @@ function selectInstance(id){
     navigator.serviceWorker.addEventListener("message", (e)=>{
       const d = e.data || {};
       if (d.type === "select-instance") selectInstance(d.instance);
-      if (d.type === "push-received") log("✓ push reached the service worker at " + new Date(d.at||Date.now()).toLocaleTimeString() + " (if no notification appeared, it's a display/OS issue, not delivery)");
+      // push-received: kept as a console-only diagnostic hook (delivery is confirmed working) — no
+      // longer written to the visible feed, where it was noise on every notification.
+      if (d.type === "push-received") console.debug("push reached the service worker at", new Date(d.at||Date.now()).toLocaleTimeString());
     });
     updateNotifStatus();
   } else {

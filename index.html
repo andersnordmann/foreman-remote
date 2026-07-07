@@ -13,6 +13,9 @@
          padding:max(12px,env(safe-area-inset-top)) 12px 28px; }
   h1 { font-size:17px; margin:4px 0 12px; letter-spacing:.2px; }
   h1 .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--mut); margin-right:7px; vertical-align:middle; }
+  .brand { display:flex; align-items:center; gap:10px; margin:4px 0 12px; }
+  .brand h1 { margin:0; }
+  .brand .logo { width:40px; height:40px; flex:0 0 auto; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin:0 0 12px; }
   .row { display:flex; justify-content:space-between; gap:10px; padding:4px 0; }
   .row .k { color:var(--mut); } .row .v { font-weight:600; text-align:right; word-break:break-word; }
@@ -62,9 +65,13 @@
   .ncheck { display:flex; align-items:center; gap:9px; color:var(--fg); font-size:14px; margin:7px 0; cursor:pointer; }
   .ncheck input { width:auto; margin:0; }
 </style>
+<meta name="theme-color" content="#0e1116">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 </head>
 <body>
-  <h1><span class="dot" id="dot"></span>claude-foreman</h1>
+  <header class="brand"><img class="logo" src="foreman-logo.png" alt="claude-foreman logo"><h1><span class="dot" id="dot"></span>claude-foreman</h1></header>
 
   <div class="card" style="padding:10px 14px">
     <label style="margin:0 0 4px 0">instance</label>

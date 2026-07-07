@@ -136,6 +136,11 @@
     </div>
   </div>
 
+  <div class="card" id="installCard" style="padding:12px 14px">
+    <button class="b-ghost full" id="installBtn" onclick="installApp()" style="margin-top:0">Install app</button>
+    <p class="muted" id="installHint" style="margin:8px 0 0">Adds this remote to your home screen as an app (standalone window + cleaner push). If it's greyed but not installed, use your browser menu &rarr; Add to Home Screen (iPhone: Share &rarr; Add to Home Screen).</p>
+  </div>
+
   <details class="card" id="notifCard">
     <summary>Notifications (this device)</summary>
     <div class="muted" id="notifStatus" style="margin:8px 0">checking…</div>
@@ -243,6 +248,8 @@ const COLORS = { running:"var(--ok)","idle":"var(--accent)", done:"var(--accent)
   stopped:"var(--bad)", crashed:"var(--bad)", error:"var(--bad)" };
 
 let lastStatus = [], lastControl = [], lastQueue = [];   // cached rows, so an instance switch re-renders without a round-trip
+let pending = null;          // {inst,cmd,since}: a tapped control not yet reflected in state -> in-flight button label
+let deferredPrompt = null;   // captured beforeinstallprompt event, so the Install button can trigger the OS prompt
 let _refreshFails = 0;   // consecutive refresh failures — log only the first of a streak (don't spam transient blips)
 function selInst(){ return localStorage.getItem(LS_INST) || ""; }
 
@@ -265,9 +272,19 @@ function setControlBtns(state){
   const paused = st.indexOf("paused") === 0;                 // paused-remote / -review / -rate-limit
   const dead   = /^(stopped|crashed|error|done)/.test(st);   // terminal: the loop is not running
   const alive  = !!st && !dead;                              // running / idle / relay-degraded / paused-*
-  if (P) P.disabled = !(alive && !paused);
-  if (R) R.disabled = !paused;
-  if (S) S.disabled = !alive;
+  // PENDING: a tapped control not yet reflected in state -> show the in-flight label and keep it inert
+  // until it LANDS (state transitions). Persists across polls (a pause can take until the batch ends);
+  // scoped to the instance it was tapped on. Cleared here the moment the state confirms the transition.
+  if (pending && pending.inst === selInst()){
+    const landed = dead                                       // terminal run: stop landed, any pause/resume is now moot
+                || (pending.cmd==="pause"  && paused)
+                || (pending.cmd==="resume" && alive && !paused);
+    if (landed) pending = null;
+  }
+  const pend = (pending && pending.inst === selInst()) ? pending.cmd : "";
+  if (P){ P.textContent = pend==="pause"  ? "Pausing…"  : "Pause";  P.disabled = !(alive && !paused) || pend==="pause"; }
+  if (R){ R.textContent = pend==="resume" ? "Resuming…" : "Resume"; R.disabled = !paused             || pend==="resume"; }
+  if (S){ S.textContent = pend==="stop"   ? "Stopping…" : "Stop";   S.disabled = !alive              || pend==="stop"; }
 }
 function renderSelected(){
   const id = selInst();
@@ -504,6 +521,8 @@ async function setControl(cmd){
       "command=excluded.command, requested_at=excluded.requested_at, requested_by='phone', ack_at=NULL",
       [arg(id), arg(cmd), arg(new Date().toISOString())]);
     log("["+id+"] control -> "+cmd);
+    pending = { inst:id, cmd, since:Date.now() };                        // in-flight until the state reflects it
+    setControlBtns((lastStatus.find(r=>r.id===id)||{}).state || "");     // instant "…ing" label; the poll keeps it fresh
     refresh();
   } catch(e){ log("set "+cmd+" failed: "+e.message, true); }
 }
@@ -643,12 +662,37 @@ function selectInstance(id){
   if ($("instance")) $("instance").value = id;
   showTab("status"); renderSelected(); renderQueue(); renderStory();
 }
+// PWA install (Add to Home Screen). Capture the browser's beforeinstallprompt so a tap can fire it; grey
+// the button when the app is already installed (standalone display-mode / iOS navigator.standalone) OR
+// when the browser isn't currently offering an install (iOS, or an already-dismissed prompt -> the hint
+// points to the browser menu). A prompt is single-use, so it's dropped after firing.
+function appInstalled(){
+  return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches)
+      || window.navigator.standalone === true;
+}
+function updateInstallBtn(){
+  const b = $("installBtn"); if (!b) return;
+  if (appInstalled()){ b.textContent = "Installed ✓"; b.disabled = true; }
+  else if (deferredPrompt){ b.textContent = "Install app"; b.disabled = false; }
+  else { b.textContent = "Install app"; b.disabled = true; }
+}
+async function installApp(){
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  try { await deferredPrompt.userChoice; } catch(e){}
+  deferredPrompt = null;   // single-use
+  updateInstallBtn();
+}
+window.addEventListener("beforeinstallprompt", (e)=>{ e.preventDefault(); deferredPrompt = e; updateInstallBtn(); });
+window.addEventListener("appinstalled", ()=>{ deferredPrompt = null; updateInstallBtn(); });
+
 (function init(){
   const qInst = new URLSearchParams(location.search).get("instance");
   if (qInst) localStorage.setItem(LS_INST, qInst);   // opened from a notification -> preselect that run
   const c = creds(); $("syncUrl").value = c.url; if (c.tok) $("token").value = c.tok;
   refresh();
   startPolling();
+  updateInstallBtn();   // reflect install state on load (greyed if already installed / not currently offerable)
   // Notifications: render this device's prefs, reflect subscription state, and make sure the service
   // worker is registered + has the creds (so an EXISTING subscription keeps working across reloads).
   if (notifSupported){

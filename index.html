@@ -138,7 +138,7 @@
 
   <div class="card" id="installCard" style="padding:12px 14px">
     <button class="b-ghost full" id="installBtn" onclick="installApp()" style="margin-top:0">Install app</button>
-    <p class="muted" id="installHint" style="margin:8px 0 0">Installs this remote as an app (standalone window, cleaner push). On Android it lands in your <b>app drawer</b> (apps list) &mdash; <b>not</b> on the home screen automatically; open it from the drawer, or long-press it there to add a home-screen shortcut. On iPhone use Share &rarr; Add to Home Screen (that one does place it on the home screen). If this button is greyed but you haven't installed it, use your browser's menu.</p>
+    <p class="muted" id="installHint" style="margin:8px 0 0">Installs as an app (Android: app drawer, not the home screen; iPhone: Share &rarr; Add to Home Screen).</p>
   </div>
 
   <details class="card" id="notifCard">
@@ -671,10 +671,17 @@ function appInstalled(){
       || window.navigator.standalone === true;
 }
 function updateInstallBtn(){
-  const b = $("installBtn"); if (!b) return;
-  if (appInstalled()){ b.textContent = "Installed ✓"; b.disabled = true; }
-  else if (deferredPrompt){ b.textContent = "Install app"; b.disabled = false; }
-  else { b.textContent = "Install app"; b.disabled = true; }
+  const b = $("installBtn"), h = $("installHint"); if (!b) return;
+  if (appInstalled()){
+    b.textContent = "Installed"; b.disabled = true;
+    if (h) h.textContent = "It's in your app drawer — long-press it there to add a home-screen shortcut.";
+  } else if (deferredPrompt){
+    b.textContent = "Install app"; b.disabled = false;
+    if (h) h.textContent = "Installs as an app (Android: app drawer, not the home screen; iPhone: Share → Add to Home Screen).";
+  } else {
+    b.textContent = "Install app"; b.disabled = true;
+    if (h) h.textContent = "Your browser isn't offering install here — use its menu (iPhone: Share → Add to Home Screen).";
+  }
 }
 async function installApp(){
   if (!deferredPrompt) return;

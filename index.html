@@ -674,6 +674,10 @@ function appInstalled(){
       || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches)
       || window.navigator.standalone === true;
 }
+function runningAsApp(){   // launched FROM the installed icon (no browser chrome) — distinct from merely detected-as-installed in a tab
+  return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches)
+      || window.navigator.standalone === true;
+}
 async function checkRelatedInstalled(){   // Chromium-only, async, best-effort; falls through silently if unsupported / returns nothing
   try {
     if (navigator.getInstalledRelatedApps){
@@ -683,14 +687,19 @@ async function checkRelatedInstalled(){   // Chromium-only, async, best-effort; 
   } catch (e) { /* unsupported / blocked -> display-mode stays the only signal */ }
 }
 function updateInstallBtn(){
-  const b = $("installBtn"), h = $("installHint"); if (!b) return;
-  if (appInstalled()){                        // grey ONLY when the app is actually installed
+  const card = $("installCard"), b = $("installBtn"), h = $("installHint"); if (!b) return;
+  if (runningAsApp()){                          // already INSIDE the installed app -> nothing to install here; hide the whole card
+    if (card) card.style.display = "none";
+    return;
+  }
+  if (card) card.style.display = "";            // in a browser tab -> card is relevant
+  if (appInstalled()){                          // installed, but we're viewing it in a tab
     b.textContent = "Installed"; b.disabled = true;
-    if (h) h.textContent = "Open it from its app icon for a standalone window.";
-  } else {                                     // NOT installed -> stays tappable (never grey just because the browser gave no prompt)
+    if (h) h.textContent = "Open it from its app icon for its own window.";
+  } else {                                      // NOT installed -> stays tappable (never grey just because the browser gave no prompt)
     b.textContent = "Install app"; b.disabled = false;
     // Same wording in every browser. If the button can't trigger install itself, the browser's own menu can.
-    if (h) h.textContent = "Installs as an app (standalone window). If this button doesn't do it in your browser, install from the browser's own menu → Add to Home Screen / Install (iPhone: Share → Add to Home Screen).";
+    if (h) h.textContent = "Installs as an app (its own window). If this button doesn't do it in your browser, install from the browser's own menu → Add to Home Screen / Install (iPhone: Share → Add to Home Screen).";
   }
 }
 async function installApp(){

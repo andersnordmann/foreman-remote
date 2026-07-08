@@ -672,23 +672,25 @@ function appInstalled(){
 }
 function updateInstallBtn(){
   const b = $("installBtn"), h = $("installHint"); if (!b) return;
-  if (appInstalled()){
+  if (appInstalled()){                        // grey ONLY when the app is actually installed
     b.textContent = "Installed"; b.disabled = true;
     if (h) h.textContent = "It's in your app drawer — long-press it there to add a home-screen shortcut.";
-  } else if (deferredPrompt){
+  } else {                                     // NOT installed -> stays tappable (never grey just because the browser gave no prompt)
     b.textContent = "Install app"; b.disabled = false;
-    if (h) h.textContent = "Installs as an app (Android: app drawer, not the home screen; iPhone: Share → Add to Home Screen).";
-  } else {
-    b.textContent = "Install app"; b.disabled = true;
-    if (h) h.textContent = "Your browser isn't offering install here — use its menu (iPhone: Share → Add to Home Screen).";
+    if (h) h.textContent = deferredPrompt
+      ? "Installs as an app (Android: app drawer, not the home screen; iPhone: Share → Add to Home Screen)."
+      : "One-tap install isn't offered here — tap for the manual path, or use your browser menu → Add to Home Screen (iPhone: Share → Add to Home Screen).";
   }
 }
 async function installApp(){
-  if (!deferredPrompt) return;
-  deferredPrompt.prompt();
-  try { await deferredPrompt.userChoice; } catch(e){}
-  deferredPrompt = null;   // single-use
-  updateInstallBtn();
+  if (deferredPrompt){
+    deferredPrompt.prompt();
+    try { await deferredPrompt.userChoice; } catch(e){}
+    deferredPrompt = null;   // one-shot; if declined/failed the button stays "Install app" (still not installed, so still active)
+    updateInstallBtn();
+  } else if ($("installHint")){   // no programmatic prompt (Samsung / iPhone / prompt already used) -> guide to the menu
+    $("installHint").textContent = "This browser has no one-tap install — use its menu → Add to Home Screen (iPhone: Share → Add to Home Screen). Note: some Androids block the WebAPK install via Play Protect (‘couldn’t install’), in which case just bookmark the page.";
+  }
 }
 window.addEventListener("beforeinstallprompt", (e)=>{ e.preventDefault(); deferredPrompt = e; updateInstallBtn(); });
 window.addEventListener("appinstalled", ()=>{ deferredPrompt = null; updateInstallBtn(); });

@@ -664,11 +664,11 @@ function selectInstance(id){
   if ($("instance")) $("instance").value = id;
   showTab("status"); renderSelected(); renderQueue(); renderStory();
 }
-// PWA install (Add to Home Screen). Capture the browser's beforeinstallprompt so a tap can fire it; grey
+// App install (Add to Home Screen). Capture the browser's beforeinstallprompt so a tap can fire it; grey
 // the button when the app is already installed (standalone display-mode / iOS navigator.standalone) OR
 // when the browser isn't currently offering an install (iOS, or an already-dismissed prompt -> the hint
 // points to the browser menu). A prompt is single-use, so it's dropped after firing.
-let relatedInstalled = false;   // set by getInstalledRelatedApps() — the ONLY way to see the installed WebAPK from a browser TAB (display-mode only sees it when RUNNING as the PWA)
+let relatedInstalled = false;   // set by getInstalledRelatedApps() — the ONLY way to see the installed app from a browser TAB (display-mode only sees it when RUNNING as the installed app)
 function appInstalled(){
   return relatedInstalled
       || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches)
@@ -700,7 +700,7 @@ async function installApp(){
     deferredPrompt = null;   // one-shot; if declined/failed the button stays "Install app" (still not installed, so still active)
     updateInstallBtn();
   } else if ($("installHint")){   // no programmatic prompt (Samsung / iPhone / prompt already used) -> guide to the menu
-    $("installHint").textContent = "This browser has no one-tap install — use its menu → Add to Home Screen (iPhone: Share → Add to Home Screen). Note: some Androids block the WebAPK install via Play Protect (‘couldn’t install’), in which case just bookmark the page.";
+    $("installHint").textContent = "This browser has no one-tap install — use its menu → Add to Home Screen (iPhone: Share → Add to Home Screen). Note: some Androids block the app install via Play Protect (‘couldn’t install’), in which case just bookmark the page.";
   }
 }
 window.addEventListener("beforeinstallprompt", (e)=>{ e.preventDefault(); deferredPrompt = e; updateInstallBtn(); });
@@ -713,7 +713,7 @@ window.addEventListener("appinstalled", ()=>{ deferredPrompt = null; updateInsta
   refresh();
   startPolling();
   updateInstallBtn();       // sync signal (display-mode / standalone)
-  checkRelatedInstalled();  // async signal — detects the installed WebAPK even from a browser tab
+  checkRelatedInstalled();  // async signal — detects the installed app even from a browser tab
   // Notifications: render this device's prefs, reflect subscription state, and make sure the service
   // worker is registered + has the creds (so an EXISTING subscription keeps working across reloads).
   if (notifSupported){

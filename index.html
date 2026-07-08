@@ -139,7 +139,7 @@
   <details class="card" id="installCard">
     <summary>Install as an app</summary>
     <button class="b-ghost full" id="installBtn" onclick="installApp()" style="margin-top:10px">Install app</button>
-    <p class="muted" id="installHint" style="margin:8px 0 0">Installs as an app (Android: app drawer, not the home screen; iPhone: Share &rarr; Add to Home Screen).</p>
+    <p class="muted" id="installHint" style="margin:8px 0 0">Installs as an app (standalone window). If this button doesn't do it in your browser, install from the browser's own menu &rarr; Add to Home Screen / Install (iPhone: Share &rarr; Add to Home Screen).</p>
   </details>
 
   <details class="card" id="notifCard">
@@ -685,12 +685,11 @@ function updateInstallBtn(){
   const b = $("installBtn"), h = $("installHint"); if (!b) return;
   if (appInstalled()){                        // grey ONLY when the app is actually installed
     b.textContent = "Installed"; b.disabled = true;
-    if (h) h.textContent = "It's in your app drawer — long-press it there to add a home-screen shortcut.";
+    if (h) h.textContent = "Open it from its app icon for a standalone window.";
   } else {                                     // NOT installed -> stays tappable (never grey just because the browser gave no prompt)
     b.textContent = "Install app"; b.disabled = false;
-    if (h) h.textContent = deferredPrompt
-      ? "Installs as an app (Android: app drawer, not the home screen; iPhone: Share → Add to Home Screen)."
-      : "One-tap install isn't offered here — tap for the manual path, or use your browser menu → Add to Home Screen (iPhone: Share → Add to Home Screen).";
+    // Same wording in every browser. If the button can't trigger install itself, the browser's own menu can.
+    if (h) h.textContent = "Installs as an app (standalone window). If this button doesn't do it in your browser, install from the browser's own menu → Add to Home Screen / Install (iPhone: Share → Add to Home Screen).";
   }
 }
 async function installApp(){

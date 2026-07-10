@@ -59,6 +59,7 @@
   .qtools label { color:var(--mut); font-size:12px; display:flex; align-items:center; gap:5px; }
   .overdue { background:var(--bad); color:#fff; padding:9px 11px; border-radius:8px;
              margin:0 0 12px; font-weight:600; font-size:13px; line-height:1.35; }
+  .overdue.info { background:var(--warn); color:#111; }   /* calm 'heads-up' variant (foreman alive; watchdog handling it) */
   .qbtn { margin-left:auto; border:1px solid var(--line); background:#21262d; color:var(--fg);
           border-radius:7px; padding:5px 10px; font-size:12px; font-weight:600; }
   .qbtn.react { border-color:var(--ok); color:var(--ok); }
@@ -293,7 +294,7 @@ function renderSelected(){
   const s = lastStatus.find(r => r.id === id);
   const c = lastControl.find(r => r.id === id) || {};
   const now = Date.now();
-  $("overdue").hidden = true;
+  $("overdue").hidden = true; $("overdue").className = "overdue";
   if (s){
     $("state").textContent = s.state || "—";
     $("dot").style.background = $("state").style.color = COLORS[s.state] || "var(--mut)";
@@ -321,6 +322,13 @@ function renderSelected(){
     // runtime = elapsed in the CURRENT phase (updated_at advances at each phase). The worker
     // phase also carries a watchdog (timeout_sec>0) -> append "/ <cap> · kills in"; the gate /
     // commit / challenge phases have no watchdog, so show the elapsed alone.
+    // Liveness (BEAT) computed FIRST, so the worker-overdue banner can tell a NORMAL watchdog reap
+    // (fresh beat) from a genuine stall (stale beat) and not cry wolf on every legitimate timeout.
+    // The foreman beats last_beat every ~25s for the WHOLE run (separate from updated_at, which moves
+    // only on a real phase change); a fresh beat proves the process is alive.
+    const BEAT_STALE_SEC = 90;
+    const beat = parseTs(s.last_beat || s.updated_at);
+    const beatStale = s.state === "running" && !isNaN(beat) && (now-beat)/1000 > BEAT_STALE_SEC;
     const to = Number(s.timeout_sec)||0, upd = parseTs(s.updated_at);
     if (s.state === "running" && !isNaN(upd)){
       const el = Math.max(0,(now-upd)/1000);
@@ -330,26 +338,30 @@ function renderSelected(){
           $("kills").textContent = durStrS(el) + " / " + durStr(to) + " · kills in " + durStr(rem);
         } else {
           $("kills").textContent = durStrS(el) + " / " + durStr(to) + " · OVERDUE by " + durStr(-rem);
-          $("overdue").hidden = false;
-          $("overdue").textContent = "⚠ No update " + durStr(-rem) + " past this cycle's timeout. "
-            + "The foreman may be stuck, or the relay/PC is offline — stop it from the PC (GUI), not just here.";
+          // A worker past its cap is NORMAL: the foreman's OWN watchdog kills + salvages/retries it at
+          // the cap (poll granularity, so a brief overrun is expected). The alarming 'stuck / act from
+          // the PC' message is driven by a STALE BEAT (below), NOT by this overrun — a fresh beat means
+          // the foreman is alive and about to reap the worker. When the beat is fresh, show a calm note.
+          if (!beatStale){
+            $("overdue").hidden = false;
+            $("overdue").className = "overdue info";
+            $("overdue").textContent = "Worker is " + durStr(-rem) + " past its " + durStr(to)
+              + " time cap — the foreman's watchdog kills + salvages/retries it at the cap.";
+          }
         }
       } else {
         $("kills").textContent = durStrS(el);   // gate / commit / challenge: elapsed, no watchdog
       }
     } else { $("kills").textContent = "—"; }
-    // BEAT-LIVENESS. The foreman beats last_beat every ~25s for the WHOLE run (separate from
-    // updated_at, which moves only on a real phase change — so runtime above is the phase's true
-    // elapsed, not reset by beats). The top-line "beat Ns ago" shows it. If it reads 'running' but
-    // no beat has landed for BEAT_STALE_SEC (several missed beats) it is NOT live — the process died
-    // without marking 'crashed' (a tree-kill that took the beater too) or the relay/network dropped:
-    // flag amber 'no signal' in ANY phase (the timeout-based OVERDUE above only covers the worker).
-    const BEAT_STALE_SEC = 90;
-    const beat = parseTs(s.last_beat || s.updated_at);
-    if (s.state === "running" && !isNaN(beat) && (now-beat)/1000 > BEAT_STALE_SEC){
+    // BEAT-STALE = the true liveness/stall signal. If it reads 'running' but no beat has landed for
+    // BEAT_STALE_SEC (several missed beats) the process is down (a tree-kill that took the beater, or
+    // the relay/network dropped) -> the real 'act from the PC' alarm, in ANY phase. This OVERRIDES the
+    // calm worker-overdue note above (resets the class to the red default).
+    if (beatStale){
       $("dot").style.background = $("state").style.color = "var(--warn)";
       $("state").textContent = "no signal";
       $("overdue").hidden = false;
+      $("overdue").className = "overdue";
       $("overdue").textContent = "⚠ No heartbeat for " + agoStr(s.last_beat || s.updated_at).replace(" ago","")
         + " (foreman beats ~every 25s). It is down or the relay/PC is offline — verify from the PC.";
     }

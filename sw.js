@@ -137,7 +137,7 @@ self.addEventListener("push", (e) => {
     const pageUrl = (cfg && cfg.pageUrl) || "./";
     const showN = (title, body, instance) => {
       const url = pageUrl + (instance ? ((pageUrl.indexOf("?") >= 0 ? "&" : "?") + "instance=" + encodeURIComponent(instance)) : "");
-      return self.registration.showNotification(title, { body, tag: TAG, renotify: true, data: { url, instance } });
+      return self.registration.showNotification(title, { body, tag: TAG, renotify: true, icon: "./icon-192.png", badge: "./badge-96.png", data: { url, instance } });
     };
     try {
       const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });

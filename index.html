@@ -54,12 +54,17 @@
   .q-dim{ opacity:.45; }   /* wontfix: a closed decision — recedes */
   .qtri { cursor:pointer; user-select:none; width:14px; display:inline-block; text-align:center; color:var(--mut); }
   .qhid { color:var(--mut); font-size:11px; }   /* '(+N)' hidden-descendant count on a collapsed parent */
+  .qprog { color:var(--mut); font-size:11px; }   /* '#8: M/N done' sub-task progress on a decomposed parent */
+  .qprog-done { color:var(--ok); font-weight:600; }   /* all sub-tasks closed (bright = stuck-rollup tell if parent still open) */
   .qtools { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:0 0 10px; }
   .qtools button { border:1px solid var(--line); background:#21262d; color:var(--fg); border-radius:7px; padding:5px 10px; font-size:12px; }
   .qtools label { color:var(--mut); font-size:12px; display:flex; align-items:center; gap:5px; }
   .overdue { background:var(--bad); color:#fff; padding:9px 11px; border-radius:8px;
              margin:0 0 12px; font-weight:600; font-size:13px; line-height:1.35; }
   .overdue.info { background:var(--warn); color:#111; }   /* calm 'heads-up' variant (foreman alive; watchdog handling it) */
+  /* #5 ACTIONABLE alert banner — always visible (outside tab panes), amber, prominent, tappable. */
+  .attn { background:var(--warn); color:#111; padding:10px 12px; border-radius:8px; margin:0 0 12px;
+          font-weight:700; font-size:13px; line-height:1.4; cursor:pointer; border:1px solid #000; }
   .qbtn { margin-left:auto; border:1px solid var(--line); background:#21262d; color:var(--fg);
           border-radius:7px; padding:5px 10px; font-size:12px; font-weight:600; }
   .qbtn.react { border-color:var(--ok); color:var(--ok); }
@@ -78,6 +83,10 @@
     <label style="margin:0 0 4px 0">instance</label>
     <select id="instance" onchange="onInstanceChange()"><option>—</option></select>
   </div>
+
+  <!-- #5: ACTIONABLE alert, ALWAYS VISIBLE (outside the tab panes, unlike #overdue) so a worker
+       that can't do its job is never buried behind a tab. Driven from foreman_status.attention. -->
+  <div class="attn" id="attn" hidden onclick="showTab('status')"></div>
 
   <div class="tabs">
     <button class="tab active" id="tab-status" onclick="showTab('status')">Status</button>
@@ -188,6 +197,14 @@ let qCollapsed = new Set((()=>{ try { return JSON.parse(localStorage.getItem(LS_
 let qShowDesc = localStorage.getItem(LS_QSHOWDESC) !== "0";   // default ON; toggle persists
 function saveQState(){ localStorage.setItem(LS_QCOLLAPSED, JSON.stringify([...qCollapsed])); localStorage.setItem(LS_QSHOWDESC, qShowDesc?"1":"0"); }
 function qDescCount(items, k){ const depth = Number(items[k].depth)||0; let n=0; for (let j=k+1;j<items.length;j++){ if ((Number(items[j].depth)||0) <= depth) break; n++; } return n; }
+// #8: [closed, total] LEAF sub-tasks under the parent at k (leaf = descendant with no children;
+// closed = done|wontfix). Shown as "M/N" on a decomposed parent so partial progress AND a stuck
+// all-children-closed-but-open parent are both visible. Mirrors gui.py App._todo_subtask_progress.
+function qSubtaskProgress(items, k){ const depth = Number(items[k].depth)||0; let closed=0, total=0;
+  for (let j=k+1;j<items.length;j++){ const jd = Number(items[j].depth)||0; if (jd<=depth) break;
+    const leaf = (j+1>=items.length) || ((Number(items[j+1].depth)||0) <= jd);
+    if (leaf){ total++; if (items[j].status==="done" || items[j].status==="wontfix") closed++; } }
+  return [closed,total]; }
 function toggleQ(id){ qCollapsed.has(id) ? qCollapsed.delete(id) : qCollapsed.add(id); saveQState(); renderQueue(); }
 function toggleQDesc(){ const cb = $("qShowDesc"); qShowDesc = cb ? cb.checked : !qShowDesc; saveQState(); renderQueue(); }
 function qCollapseAll(collapse){
@@ -295,6 +312,10 @@ function renderSelected(){
   const c = lastControl.find(r => r.id === id) || {};
   const now = Date.now();
   $("overdue").hidden = true; $("overdue").className = "overdue";
+  // #5: the always-visible actionable alert (shown on EVERY tab). Non-empty attention => a worker
+  // can't do its job / a task is stuck and needs the user.
+  const attnEl = $("attn");
+  if (attnEl){ const at = (s && s.attention) ? String(s.attention) : ""; attnEl.hidden = !at; attnEl.textContent = at; }
   if (s){
     $("state").textContent = s.state || "—";
     $("dot").style.background = $("state").style.color = COLORS[s.state] || "var(--mut)";
@@ -438,10 +459,12 @@ function renderQueue(){
     const tri = hasKids ? `<span class="qtri" onclick="toggleQ('${esc(i.id)}')">${collapsed?"▸":"▾"}</span>`
                         : `<span class="qtri"></span>`;
     const hid = collapsed ? ` <span class="qhid">(+${qDescCount(items,k)})</span>` : "";
+    let prog = "";
+    if (hasKids){ const p = qSubtaskProgress(items,k); if (p[1]) prog = ` <span class="qprog${p[0]===p[1]?' qprog-done':''}">${p[0]}/${p[1]} done</span>`; }
     html += `<div class="qitem${rowcls}"${indent}><div class="qhead">`+
       tri+
       `<span class="qst ${working?'s-running':'s-'+esc(i.status)}">${working?'▶ working':esc(i.status)}</span>`+
-      `<b>${esc(i.id)}</b>${hid}<span class="muted">${esc(i.ledger||"")}</span>${btn}</div>`+
+      `<b>${esc(i.id)}</b>${hid}${prog}<span class="muted">${esc(i.ledger||"")}</span>${btn}</div>`+
       (qShowDesc && i.title ? `<div class="qtitle" title="${esc(i.title)}">${esc(i.title)}</div>` : "")+
       `</div>`;
     if (collapsed) skipBelow = depth;

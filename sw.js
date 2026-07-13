@@ -115,6 +115,9 @@ function messageFor(row) {
   else if (st.indexOf("stopped") === 0) { title = "⏹ Stopped"; body = story || inst; }
   else if (st === "paused-rate-limit") { title = "⏳ Paused — rate limit"; body = story || (inst + " — waiting for your quota to reset, then it resumes"); }
   else if (st.indexOf("paused") === 0) { title = "⏸ Paused"; body = story || (inst + " — " + st.replace("paused-", "")); }
+  // #5: an ACTIONABLE alert (a worker can't do its job / a task is stuck) outranks the routine
+  // running-phase titles — surface it verbatim so it is never buried.
+  else if (row.attention) { title = "⚠️ Needs you"; body = String(row.attention); }
   // Otherwise the run is 'running' — title by the EVENT that fired the push, body = the story line
   // (so an escalation reads "Needs review" + exactly which task and why), falling back to the phase.
   else if (ev === "attention") { title = "⚠️ Needs review"; body = story || (fallback + " — a task was escalated"); }
@@ -145,7 +148,7 @@ self.addEventListener("push", (e) => {
     } catch (err) { /* ignore */ }
     await showN("claude-foreman", "Update — tap to open", "");   // GUARANTEED first, before any await on the network
     if (cfg && cfg.syncUrl && cfg.token) {                       // enrich in place (best-effort)
-      const rows = await tursoQuery(cfg, "SELECT id, updated_at, state, batch, last_item, last_result, pending, push_event, story FROM foreman_status");
+      const rows = await tursoQuery(cfg, "SELECT id, updated_at, state, batch, last_item, last_result, pending, push_event, story, attention FROM foreman_status");
       if (rows) {
         const seen = (await cacheGet(SEEN_KEY)) || {};
         const row = pickChanged(rows, seen);

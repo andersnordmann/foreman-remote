@@ -29,6 +29,7 @@
   button:active { transform:translateY(1px); }
   button:disabled { opacity:.45; cursor:default; transform:none; }   /* state-aware: the INERT button dims but KEEPS its colour (green=Enable-family, red=Disable-family). The bright button is always the live action; labels flip Enable<->Enabled / Disable<->Disabled to reinforce it. */
   .b-pause{ background:var(--warn); } .b-resume{ background:var(--ok); } .b-stop{ background:var(--bad); }
+  .b-stopafter{ background:#a15c00; }   /* graceful stop-after: distinct from immediate red Stop-now */
   .b-ghost{ background:#21262d; color:var(--fg); border:1px solid var(--line); }
   .full { width:100%; margin-top:8px; }
   #log { font:12px monospace; color:var(--mut); white-space:pre-wrap; max-height:160px; overflow:auto; }
@@ -121,8 +122,9 @@
       <div class="btns">
         <button class="b-pause"  id="pauseBtn"  onclick="setControl('pause')">Pause</button>
         <button class="b-resume" id="resumeBtn" onclick="setControl('resume')">Resume</button>
-        <button class="b-stop"   id="stopBtn"   onclick="setControl('stop')">Stop</button>
+        <button class="b-stop"   id="stopBtn"   onclick="setControl('stop')">Stop now</button>
       </div>
+      <button class="b-stopafter full" id="stopAfterBtn" onclick="setControl('stop-after')">Stop after current task</button>
       <button class="b-ghost full" onclick="refresh()">Refresh now</button>
     </div>
   </div>
@@ -287,7 +289,7 @@ function populateInstances(){
 // already paused. Resume: only while paused. Stop: whenever the foreman is alive. All dim when the run
 // is stopped/done/crashed or there's no status (nothing to control).
 function setControlBtns(state){
-  const P=$("pauseBtn"), R=$("resumeBtn"), S=$("stopBtn");
+  const P=$("pauseBtn"), R=$("resumeBtn"), S=$("stopBtn"), SA=$("stopAfterBtn");
   const st = state || "";
   const paused = st.indexOf("paused") === 0;                 // paused-remote / -review / -rate-limit
   const dead   = /^(stopped|crashed|error|done)/.test(st);   // terminal: the loop is not running
@@ -304,7 +306,8 @@ function setControlBtns(state){
   const pend = (pending && pending.inst === selInst()) ? pending.cmd : "";
   if (P){ P.textContent = pend==="pause"  ? "Pausing…"  : "Pause";  P.disabled = !(alive && !paused) || pend==="pause"; }
   if (R){ R.textContent = pend==="resume" ? "Resuming…" : "Resume"; R.disabled = !paused             || pend==="resume"; }
-  if (S){ S.textContent = pend==="stop"   ? "Stopping…" : "Stop";   S.disabled = !alive              || pend==="stop"; }
+  if (S){ S.textContent = pend==="stop"   ? "Stopping…" : "Stop now";   S.disabled = !alive || pend==="stop" || pend==="stop-after"; }
+  if (SA){ SA.textContent = pend==="stop-after" ? "Stopping after task…" : "Stop after current task"; SA.disabled = !alive || pend==="stop" || pend==="stop-after"; }
 }
 function renderSelected(){
   const id = selInst();
@@ -550,7 +553,8 @@ async function itemCmd(item, action){
 async function setControl(cmd){
   const id = selInst();
   if (!id){ log("pick an instance first", true); return; }
-  if (cmd==="stop" && !confirm("Stop the foreman ('"+id+"')? The current worker/challenger is killed immediately and its unfinished work is discarded (not committed); the run then halts.")) return;
+  if (cmd==="stop" && !confirm("Stop NOW ('"+id+"')? The current worker is stopped immediately; its unfinished work is SET ASIDE (recoverable, not committed) and the run halts. To let the task finish first, use 'Stop after current task'.")) return;
+  if (cmd==="stop-after" && !confirm("Stop after the current task ('"+id+"')? The run lets the task in hand FINISH (up to its time cap), banks it, then halts — nothing in progress is discarded.")) return;
   try{
     await pipeline(
       "INSERT INTO foreman_control(id,command,requested_at,requested_by,ack_at) "+

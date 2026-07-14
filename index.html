@@ -149,7 +149,7 @@
             <button class="b-stop-caret" id="stopMenuBtn" aria-haspopup="true" aria-expanded="false" aria-label="More stop options" onclick="toggleStopMenu(event)">&#9662;</button>
           </div>
           <div class="stopmenu" id="stopMenu" hidden>
-            <button class="sm-item sm-default" onclick="chooseStop('stop-after')"><span class="sm-t">Stop after current task</span><span class="sm-h">lets it finish &amp; bank, then halts</span></button>
+            <button class="sm-item sm-default" id="stopAfterItem" onclick="chooseStop('stop-after')"><span class="sm-t">Stop after current task</span><span class="sm-h">lets it finish &amp; bank, then halts</span></button>
             <button class="sm-item sm-danger" id="stopBtn" onclick="chooseStop('stop')"><span class="sm-t">Stop now</span><span class="sm-h">discards the current task's progress (set aside, recoverable)</span></button>
           </div>
         </div>
@@ -318,7 +318,7 @@ function populateInstances(){
 // already paused. Resume: only while paused. Stop: whenever the foreman is alive. All dim when the run
 // is stopped/done/crashed or there's no status (nothing to control).
 function setControlBtns(state){
-  const P=$("pauseBtn"), R=$("resumeBtn"), S=$("stopBtn"), SA=$("stopAfterBtn"), SC=$("stopMenuBtn");
+  const P=$("pauseBtn"), R=$("resumeBtn"), S=$("stopBtn"), SA=$("stopAfterBtn"), SC=$("stopMenuBtn"), SAI=$("stopAfterItem");
   const st = state || "";
   const paused = st.indexOf("paused") === 0;                 // paused-remote / -review / -rate-limit
   const dead   = /^(stopped|crashed|error|done)/.test(st);   // terminal: the loop is not running
@@ -346,9 +346,10 @@ function setControlBtns(state){
   // stop never lands — e.g. an older foreman that predates stop-after). Only a pending HARD stop,
   // already the most immediate action, disables the whole control.
   const hardStop = pend === "stop";
-  if (SA){ SA.disabled = !alive || stopping; }             // main action: disabled while any stop is in flight
-  if (SC){ SC.disabled = !alive || hardStop; }             // caret: open the tray unless a hard stop is already in flight
-  if (S){ S.disabled = !alive || hardStop; }               // "Stop now": stays live during a pending graceful stop
+  if (SA){ SA.disabled = !alive || stopping; }             // main "Stop" face: shows "Stopping…", disabled while any stop is in flight
+  if (SC){ SC.disabled = !alive || hardStop; }             // caret: tray stays openable during a graceful stop, so you can escalate
+  if (SAI){ SAI.disabled = !alive || stopping; }           // "Stop after" tray item: disabled once a stop is in flight (already issued)
+  if (S){ S.disabled = !alive || hardStop; }               // "Stop now" tray item: stays live during a pending graceful stop (escalation)
   if (hardStop) closeStopMenu();                           // only fold the tray once the immediate stop is in flight
 }
 function renderSelected(){

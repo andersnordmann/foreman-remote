@@ -212,7 +212,7 @@
       <button class="b-ghost" onclick="saveCreds()">Save</button>
       <button class="b-ghost" onclick="clearCreds()">Clear</button>
     </div>
-    <p class="muted">Token is kept in this browser's localStorage only — never sent anywhere except Turso. Rotate it if this device is lost.</p>
+    <p class="muted">Token is kept only in this browser (localStorage) — it's sent only to your run's status database, nowhere else. Rotate it if this device is lost.</p>
   </details>
 
   <div class="card"><div id="log"></div></div>
@@ -429,8 +429,8 @@ function renderSelected(){
       $("state").textContent = "no signal";
       $("overdue").hidden = false;
       $("overdue").className = "overdue";
-      $("overdue").textContent = "⚠ No heartbeat for " + agoStr(s.last_beat || s.updated_at).replace(" ago","")
-        + " (foreman beats ~every 25s). It is down or the relay/PC is offline — verify from the PC.";
+      $("overdue").textContent = "⚠ No signal for " + agoStr(s.last_beat || s.updated_at).replace(" ago","")
+        + " (the run checks in ~every 25s). It's down, or the PC/connection is offline — check from the PC.";
     }
     // token usage (cumulative for THIS run). input = fresh prompt tokens; cached = context tokens
     // (cache READ + WRITE, so input+cached+output reconciles with the by-model total); output = generated.

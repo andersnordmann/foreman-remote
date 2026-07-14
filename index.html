@@ -29,7 +29,24 @@
   button:active { transform:translateY(1px); }
   button:disabled { opacity:.45; cursor:default; transform:none; }   /* state-aware: the INERT button dims but KEEPS its colour (green=Enable-family, red=Disable-family). The bright button is always the live action; labels flip Enable<->Enabled / Disable<->Disabled to reinforce it. */
   .b-pause{ background:var(--warn); } .b-resume{ background:var(--ok); } .b-stop{ background:var(--bad); }
-  .b-stopafter{ background:#a15c00; }   /* graceful stop-after: distinct from immediate red Stop-now */
+  /* Stop = ONE split control living in the 3rd cell of the button row. Main tap = the default
+     (stop after current task); the caret opens a dropdown that also holds the destructive "Stop now". */
+  .stopwrap { position:relative; }
+  .stopsplit { display:flex; height:100%; }
+  .b-stop-main { flex:1 1 auto; background:var(--bad); border-radius:10px 0 0 10px; padding-left:8px; padding-right:4px; }
+  .b-stop-caret { flex:0 0 34px; background:var(--bad); border-radius:0 10px 10px 0; padding:13px 0; font-size:15px;
+                  box-shadow:inset 1px 0 0 rgba(0,0,0,.28); }   /* hairline split between main + caret */
+  .stopmenu { position:absolute; right:0; top:calc(100% + 6px); z-index:20; min-width:248px; max-width:calc(100vw - 40px);
+              background:var(--card); border:1px solid var(--line); border-radius:12px; padding:6px; box-shadow:0 12px 34px rgba(0,0,0,.55); }
+  .stopmenu[hidden] { display:none; }
+  .sm-item { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%;
+             background:transparent; color:var(--fg); text-align:left; padding:11px 12px; border-radius:8px; font-weight:600; }
+  .sm-item + .sm-item { margin-top:4px; }
+  .sm-item:active { background:#0b0f14; }
+  .sm-t { font-size:15px; font-weight:700; }
+  .sm-h { font-size:12px; font-weight:400; color:var(--mut); }
+  .sm-danger { border:1px solid var(--bad); }
+  .sm-danger .sm-t { color:var(--bad); }
   .b-ghost{ background:#21262d; color:var(--fg); border:1px solid var(--line); }
   .full { width:100%; margin-top:8px; }
   #log { font:12px monospace; color:var(--mut); white-space:pre-wrap; max-height:160px; overflow:auto; }
@@ -122,9 +139,17 @@
       <div class="btns">
         <button class="b-pause"  id="pauseBtn"  onclick="setControl('pause')">Pause</button>
         <button class="b-resume" id="resumeBtn" onclick="setControl('resume')">Resume</button>
-        <button class="b-stop"   id="stopBtn"   onclick="setControl('stop')">Stop now</button>
+        <div class="stopwrap">
+          <div class="stopsplit">
+            <button class="b-stop-main" id="stopAfterBtn" onclick="setControl('stop-after')">Stop</button>
+            <button class="b-stop-caret" id="stopMenuBtn" aria-haspopup="true" aria-expanded="false" aria-label="More stop options" onclick="toggleStopMenu(event)">&#9662;</button>
+          </div>
+          <div class="stopmenu" id="stopMenu" hidden>
+            <button class="sm-item" onclick="chooseStop('stop-after')"><span class="sm-t">Stop after current task</span><span class="sm-h">lets it finish &amp; bank, then halts &mdash; recommended</span></button>
+            <button class="sm-item sm-danger" id="stopBtn" onclick="chooseStop('stop')"><span class="sm-t">Stop now</span><span class="sm-h">discards the current task's progress (set aside, recoverable)</span></button>
+          </div>
+        </div>
       </div>
-      <button class="b-stopafter full" id="stopAfterBtn" onclick="setControl('stop-after')">Stop after current task</button>
       <button class="b-ghost full" onclick="refresh()">Refresh now</button>
     </div>
   </div>
@@ -289,7 +314,7 @@ function populateInstances(){
 // already paused. Resume: only while paused. Stop: whenever the foreman is alive. All dim when the run
 // is stopped/done/crashed or there's no status (nothing to control).
 function setControlBtns(state){
-  const P=$("pauseBtn"), R=$("resumeBtn"), S=$("stopBtn"), SA=$("stopAfterBtn");
+  const P=$("pauseBtn"), R=$("resumeBtn"), S=$("stopBtn"), SA=$("stopAfterBtn"), SC=$("stopMenuBtn");
   const st = state || "";
   const paused = st.indexOf("paused") === 0;                 // paused-remote / -review / -rate-limit
   const dead   = /^(stopped|crashed|error|done)/.test(st);   // terminal: the loop is not running
@@ -306,8 +331,12 @@ function setControlBtns(state){
   const pend = (pending && pending.inst === selInst()) ? pending.cmd : "";
   if (P){ P.textContent = pend==="pause"  ? "Pausing…"  : "Pause";  P.disabled = !(alive && !paused) || pend==="pause"; }
   if (R){ R.textContent = pend==="resume" ? "Resuming…" : "Resume"; R.disabled = !paused             || pend==="resume"; }
-  if (S){ S.textContent = pend==="stop"   ? "Stopping…" : "Stop now";   S.disabled = !alive || pend==="stop" || pend==="stop-after"; }
-  if (SA){ SA.textContent = pend==="stop-after" ? "Stopping after task…" : "Stop after current task"; SA.disabled = !alive || pend==="stop" || pend==="stop-after"; }
+  const stopping = pend==="stop" || pend==="stop-after";
+  // one split control: the MAIN button ("Stop") shows the in-flight state; the caret + tray item just disable
+  if (SA){ SA.textContent = stopping ? "Stopping…" : "Stop"; SA.disabled = !alive || stopping; }
+  if (SC){ SC.disabled = !alive || stopping; }
+  if (S){ S.disabled = !alive || stopping; }               // "Stop now" lives in the dropdown; its label is static (carries a hint)
+  if (stopping) closeStopMenu();                            // a landed choice folds the tray away
 }
 function renderSelected(){
   const id = selInst();
@@ -567,6 +596,13 @@ async function setControl(cmd){
     refresh();
   } catch(e){ log("set "+cmd+" failed: "+e.message, true); }
 }
+
+// Stop split-button dropdown: the caret opens the tray of stop options; a choice (or a tap outside) closes it.
+function toggleStopMenu(e){ if (e) e.stopPropagation(); const m=$("stopMenu"), b=$("stopMenuBtn"); if (!m) return;
+  const open = m.hidden; m.hidden = !open; if (b) b.setAttribute("aria-expanded", String(open)); }
+function closeStopMenu(){ const m=$("stopMenu"), b=$("stopMenuBtn"); if (m) m.hidden = true; if (b) b.setAttribute("aria-expanded","false"); }
+function chooseStop(cmd){ closeStopMenu(); setControl(cmd); }
+document.addEventListener("click", e => { if (!(e.target.closest && e.target.closest(".stopwrap"))) closeStopMenu(); });
 
 function saveCreds(){
   localStorage.setItem(LS_URL, $("syncUrl").value.trim());

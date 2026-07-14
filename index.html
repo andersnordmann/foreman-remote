@@ -33,20 +33,26 @@
      (stop after current task); the caret opens a dropdown that also holds the destructive "Stop now". */
   .stopwrap { position:relative; }
   .stopsplit { display:flex; height:100%; }
-  .b-stop-main { flex:1 1 auto; background:var(--bad); border-radius:10px 0 0 10px; padding-left:8px; padding-right:4px; }
+  .b-stop-main { flex:1 1 auto; background:var(--bad); border-radius:10px 0 0 10px; padding:7px 4px;
+                 display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.12; gap:1px; }
+  .ss-t { font-size:15px; font-weight:700; }
+  .ss-sub { font-size:11px; font-weight:500; opacity:.9; }   /* the DEFAULT value, shown on the closed control */
   .b-stop-caret { flex:0 0 34px; background:var(--bad); border-radius:0 10px 10px 0; padding:13px 0; font-size:15px;
                   box-shadow:inset 1px 0 0 rgba(0,0,0,.28); }   /* hairline split between main + caret */
-  .stopmenu { position:absolute; right:0; top:calc(100% + 6px); z-index:20; min-width:248px; max-width:calc(100vw - 40px);
+  .stopmenu { position:absolute; right:0; top:calc(100% + 6px); z-index:20; min-width:320px; max-width:calc(100vw - 40px);
               background:var(--card); border:1px solid var(--line); border-radius:12px; padding:6px; box-shadow:0 12px 34px rgba(0,0,0,.55); }
   .stopmenu[hidden] { display:none; }
-  .sm-item { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%;
-             background:transparent; color:var(--fg); text-align:left; padding:11px 12px; border-radius:8px; font-weight:600; }
+  .sm-item { position:relative; display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%;
+             background:transparent; color:var(--fg); text-align:left; padding:11px 12px 11px 34px; border-radius:8px; font-weight:600; }
   .sm-item + .sm-item { margin-top:4px; }
   .sm-item:active { background:#0b0f14; }
   .sm-t { font-size:15px; font-weight:700; }
   .sm-h { font-size:12px; font-weight:400; color:var(--mut); }
-  .sm-danger { border:1px solid var(--bad); }
-  .sm-danger .sm-t { color:var(--bad); }
+  .sm-default { background:rgba(56,139,253,.14); }                                   /* THE selected / default row */
+  .sm-default::before { content:"\2713"; position:absolute; left:13px; top:11px; color:var(--accent); font-weight:800; }
+  .sm-pill { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--accent);
+             border:1px solid var(--accent); border-radius:6px; padding:1px 5px; margin-left:7px; vertical-align:middle; }
+  .sm-danger .sm-t { color:var(--bad); }                                            /* alternate = red TEXT only (no box) */
   .b-ghost{ background:#21262d; color:var(--fg); border:1px solid var(--line); }
   .full { width:100%; margin-top:8px; }
   #log { font:12px monospace; color:var(--mut); white-space:pre-wrap; max-height:160px; overflow:auto; }
@@ -141,11 +147,11 @@
         <button class="b-resume" id="resumeBtn" onclick="setControl('resume')">Resume</button>
         <div class="stopwrap">
           <div class="stopsplit">
-            <button class="b-stop-main" id="stopAfterBtn" onclick="setControl('stop-after')">Stop</button>
+            <button class="b-stop-main" id="stopAfterBtn" onclick="setControl('stop-after')"><span class="ss-t" id="stopMainT">Stop</span><span class="ss-sub" id="stopMainSub">after task</span></button>
             <button class="b-stop-caret" id="stopMenuBtn" aria-haspopup="true" aria-expanded="false" aria-label="More stop options" onclick="toggleStopMenu(event)">&#9662;</button>
           </div>
           <div class="stopmenu" id="stopMenu" hidden>
-            <button class="sm-item" onclick="chooseStop('stop-after')"><span class="sm-t">Stop after current task</span><span class="sm-h">lets it finish &amp; bank, then halts &mdash; recommended</span></button>
+            <button class="sm-item sm-default" onclick="chooseStop('stop-after')"><span class="sm-t">Stop after current task<span class="sm-pill">default</span></span><span class="sm-h">lets it finish &amp; bank, then halts</span></button>
             <button class="sm-item sm-danger" id="stopBtn" onclick="chooseStop('stop')"><span class="sm-t">Stop now</span><span class="sm-h">discards the current task's progress (set aside, recoverable)</span></button>
           </div>
         </div>
@@ -332,8 +338,12 @@ function setControlBtns(state){
   if (P){ P.textContent = pend==="pause"  ? "Pausing…"  : "Pause";  P.disabled = !(alive && !paused) || pend==="pause"; }
   if (R){ R.textContent = pend==="resume" ? "Resuming…" : "Resume"; R.disabled = !paused             || pend==="resume"; }
   const stopping = pend==="stop" || pend==="stop-after";
-  // one split control: the MAIN button ("Stop") shows the in-flight state; the caret + tray item just disable
-  if (SA){ SA.textContent = stopping ? "Stopping…" : "Stop"; SA.disabled = !alive || stopping; }
+  // one split control: the MAIN button shows "Stop / after task" (the default value) or the in-flight state;
+  // the caret + tray item just disable. Target the title/subtitle spans so we don't wipe the 2-line face.
+  const ST=$("stopMainT"), SUB=$("stopMainSub");
+  if (ST) ST.textContent = stopping ? "Stopping…" : "Stop";
+  if (SUB) SUB.style.display = stopping ? "none" : "";
+  if (SA){ SA.disabled = !alive || stopping; }
   if (SC){ SC.disabled = !alive || stopping; }
   if (S){ S.disabled = !alive || stopping; }               // "Stop now" lives in the dropdown; its label is static (carries a hint)
   if (stopping) closeStopMenu();                            // a landed choice folds the tray away

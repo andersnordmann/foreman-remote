@@ -341,10 +341,15 @@ function setControlBtns(state){
   const ST=$("stopMainT"), SUB=$("stopMainSub");
   if (ST) ST.textContent = stopping ? "Stopping…" : "Stop";
   if (SUB) SUB.style.display = stopping ? "none" : "";
-  if (SA){ SA.disabled = !alive || stopping; }
-  if (SC){ SC.disabled = !alive || stopping; }
-  if (S){ S.disabled = !alive || stopping; }               // "Stop now" lives in the dropdown; its label is static (carries a hint)
-  if (stopping) closeStopMenu();                            // a landed choice folds the tray away
+  // ESCALATION must never be locked out: a pending GRACEFUL stop-after keeps the caret + "Stop now"
+  // reachable so you can still upgrade to an immediate stop (and it's the only escape if a graceful
+  // stop never lands — e.g. an older foreman that predates stop-after). Only a pending HARD stop,
+  // already the most immediate action, disables the whole control.
+  const hardStop = pend === "stop";
+  if (SA){ SA.disabled = !alive || stopping; }             // main action: disabled while any stop is in flight
+  if (SC){ SC.disabled = !alive || hardStop; }             // caret: open the tray unless a hard stop is already in flight
+  if (S){ S.disabled = !alive || hardStop; }               // "Stop now": stays live during a pending graceful stop
+  if (hardStop) closeStopMenu();                           // only fold the tray once the immediate stop is in flight
 }
 function renderSelected(){
   const id = selInst();

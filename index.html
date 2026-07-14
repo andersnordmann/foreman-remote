@@ -39,7 +39,7 @@
   .ss-sub { font-size:11px; font-weight:500; opacity:.9; }   /* the DEFAULT value, shown on the closed control */
   .b-stop-caret { flex:0 0 34px; background:var(--bad); border-radius:0 10px 10px 0; padding:13px 0; font-size:15px;
                   box-shadow:inset 1px 0 0 rgba(0,0,0,.28); }   /* hairline split between main + caret */
-  .stopmenu { position:absolute; right:0; top:calc(100% + 6px); z-index:20; min-width:320px; max-width:calc(100vw - 40px);
+  .stopmenu { position:absolute; right:0; top:calc(100% + 6px); z-index:20; min-width:260px; max-width:calc(100vw - 40px);
               background:var(--card); border:1px solid var(--line); border-radius:12px; padding:6px; box-shadow:0 12px 34px rgba(0,0,0,.55); }
   .stopmenu[hidden] { display:none; }
   .sm-item { position:relative; display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%;
@@ -50,8 +50,6 @@
   .sm-h { font-size:12px; font-weight:400; color:var(--mut); }
   .sm-default { background:rgba(56,139,253,.14); }                                   /* THE selected / default row */
   .sm-default::before { content:"\2713"; position:absolute; left:13px; top:11px; color:var(--accent); font-weight:800; }
-  .sm-pill { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--accent);
-             border:1px solid var(--accent); border-radius:6px; padding:1px 5px; margin-left:7px; vertical-align:middle; }
   .sm-danger .sm-t { color:var(--bad); }                                            /* alternate = red TEXT only (no box) */
   .b-ghost{ background:#21262d; color:var(--fg); border:1px solid var(--line); }
   .full { width:100%; margin-top:8px; }
@@ -151,7 +149,7 @@
             <button class="b-stop-caret" id="stopMenuBtn" aria-haspopup="true" aria-expanded="false" aria-label="More stop options" onclick="toggleStopMenu(event)">&#9662;</button>
           </div>
           <div class="stopmenu" id="stopMenu" hidden>
-            <button class="sm-item sm-default" onclick="chooseStop('stop-after')"><span class="sm-t">Stop after current task<span class="sm-pill">default</span></span><span class="sm-h">lets it finish &amp; bank, then halts</span></button>
+            <button class="sm-item sm-default" onclick="chooseStop('stop-after')"><span class="sm-t">Stop after current task</span><span class="sm-h">lets it finish &amp; bank, then halts</span></button>
             <button class="sm-item sm-danger" id="stopBtn" onclick="chooseStop('stop')"><span class="sm-t">Stop now</span><span class="sm-h">discards the current task's progress (set aside, recoverable)</span></button>
           </div>
         </div>

@@ -114,6 +114,7 @@
     <button class="tab active" id="tab-status" onclick="showTab('status')">Status</button>
     <button class="tab" id="tab-queue" onclick="showTab('queue')">To-do</button>
     <button class="tab" id="tab-story" onclick="showTab('story')">Story</button>
+    <button class="tab" id="tab-qa" onclick="showTab('qa')">Step Q&amp;A</button>
   </div>
 
   <div class="tabpane" id="pane-status">
@@ -175,6 +176,26 @@
     <div class="card">
       <div class="muted" style="margin-bottom:8px">Plain-English feed of what the run is doing (newest first).</div>
       <div id="storylist"></div>
+    </div>
+  </div>
+
+  <!-- Item 2: interactive step-status Q&A. Ask about the RUNNING step; the foreman answers from the
+       ACTUAL transcript (read-only, non-disruptive) so you can decide whether to stop it. Multi-turn. -->
+  <div class="tabpane" id="pane-qa" hidden>
+    <div class="card">
+      <div class="muted" style="margin-bottom:8px">Ask about the <b>running step</b> — the foreman answers from its actual transcript (read-only, safe), so you can decide whether to stop it. Leave the box empty for a status + stop/continue recommendation, or type a follow-up.</div>
+      <textarea id="qaInput" rows="2" placeholder="e.g. is it stuck? what has it changed? — or leave blank for a status + stop recommendation" style="width:100%;box-sizing:border-box"></textarea>
+      <div class="btns" style="grid-template-columns:1fr auto;margin-top:8px">
+        <button class="b-resume" onclick="qaAsk()">Ask</button>
+        <button class="b-ghost" onclick="renderQA()">Refresh answers</button>
+      </div>
+      <div id="qaThread" style="margin-top:12px"></div>
+      <hr style="border:0;border-top:1px solid var(--line);margin:12px 0">
+      <div class="muted" style="margin-bottom:6px">Decided to stop it?</div>
+      <div class="btns" style="grid-template-columns:1fr 1fr">
+        <button class="b-stop" onclick="setControl('stop-after')">Stop after task</button>
+        <button class="b-stop" onclick="setControl('stop')">Stop now</button>
+      </div>
     </div>
   </div>
 
@@ -253,10 +274,11 @@ const NOTIF_DEFAULTS = { done: true, attention: true, paused: true, item: false,
 let timer = null;
 const esc = s => String(s==null?"":s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function showTab(name){
-  for (const t of ["status","queue","story"]){
+  for (const t of ["status","queue","story","qa"]){
     $("pane-"+t).hidden = (t!==name);
     $("tab-"+t).classList.toggle("active", t===name);
   }
+  if (name==="qa") renderQA();   // Item 2: load the step-status Q&A thread on open
 }
 
 function log(msg, isErr) {
@@ -538,6 +560,7 @@ async function refresh(){
     renderSelected();
     renderQueue();
     renderStory();
+    if ($("pane-qa") && !$("pane-qa").hidden) renderQA();   // Item 2: poll for new answers while the Q&A tab is open
     if (_refreshFails){ log("connection recovered"); _refreshFails = 0; }
   } catch(e){
     // Log only the FIRST failure of a streak (a backgrounded tab resuming before the network is
@@ -627,6 +650,43 @@ async function requestAnalyze(){
     log("["+id+"] analysis requested — the report will appear under the Story tab shortly (~a minute).");
     refresh();
   } catch(e){ log("analyze request failed: "+e.message, true); }
+}
+
+// Item 2: interactive step-status Q&A. The phone has no local compute, so it POSTS a question to the
+// foreman_qa channel; the foreman answers it from the running step's ACTUAL transcript
+// (analyze_transcript.py, read-only) and writes the answer back — a transcript-verified conversation to
+// decide whether to STOP the step. Multi-turn: each Ask is a new turn; the thread shows Q+A. NOTE: the
+// foreman-side answerer is in foreman.ps1 (restart-gated), so answers begin flowing after the next
+// foreman restart; the questions queue safely until then.
+const QA_DDL = "CREATE TABLE IF NOT EXISTS foreman_qa (id TEXT, seq INTEGER, session TEXT, question TEXT, answer TEXT, asked_at TEXT, answered_at TEXT, asked_by TEXT, PRIMARY KEY (id, seq))";
+async function qaAsk(){
+  const id = selInst(); if(!id){ log("pick an instance first", true); return; }
+  const qtext = ($("qaInput").value||"").trim();
+  try{
+    await pipeline(QA_DDL);   // idempotent — works even before the foreman first creates the table
+    const rows = await pipeline("SELECT COALESCE(MAX(seq),0)+1 AS nxt FROM foreman_qa WHERE id=?", [arg(id)]);
+    const seq = (rows[0] && rows[0].nxt) ? rows[0].nxt : 1;
+    await pipeline("INSERT INTO foreman_qa(id,seq,session,question,answer,asked_at,answered_at,asked_by) "+
+      "VALUES(?,?,?,?,NULL,?,NULL,'phone')",
+      [arg(id), arg(seq), arg('latest'), arg(qtext), arg(new Date().toISOString())]);
+    $("qaInput").value = "";
+    log("["+id+"] asked — the foreman answers from the transcript shortly (~a minute).");
+    renderQA();
+  } catch(e){ log("ask failed: "+e.message, true); }
+}
+async function renderQA(){
+  const box = $("qaThread"); if(!box) return;
+  const id = selInst(); if(!id){ box.innerHTML = "<div class='muted'>pick an instance first</div>"; return; }
+  try{
+    await pipeline(QA_DDL);
+    const rows = await pipeline("SELECT seq,question,answer FROM foreman_qa WHERE id=? ORDER BY seq", [arg(id)]);
+    if(!rows.length){ box.innerHTML = "<div class='muted'>No questions yet. Ask about the running step to decide whether to stop it.</div>"; return; }
+    box.innerHTML = rows.map(r => {
+      const q = r.question ? esc(r.question) : "(status + stop/continue recommendation)";
+      const a = r.answer ? esc(r.answer) : "<span class='muted'>…the foreman is answering from the transcript (~a minute)…</span>";
+      return "<div class='srow' style='margin-bottom:10px'><div style='font-weight:600;margin-bottom:4px'>Q"+r.seq+": "+q+"</div><div style='white-space:pre-wrap'>"+a+"</div></div>";
+    }).join("");
+  } catch(e){ box.innerHTML = "<div class='muted'>Q&amp;A unavailable: "+esc(e.message)+"</div>"; }
 }
 
 // Stop split-button dropdown: the caret opens the tray of stop options; a choice (or a tap outside) closes it.

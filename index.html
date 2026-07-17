@@ -155,7 +155,6 @@
           </div>
         </div>
       </div>
-      <button class="b-ghost full" onclick="requestAnalyze()">Analyze current agent</button>
       <button class="b-ghost full" onclick="refresh()">Refresh now</button>
     </div>
   </div>
@@ -633,23 +632,6 @@ async function setControl(cmd){
     setControlBtns((lastStatus.find(r=>r.id===id)||{}).state || "");     // instant "…ing" label; the poll keeps it fresh
     refresh();
   } catch(e){ log("set "+cmd+" failed: "+e.message, true); }
-}
-
-// ONE-SHOT 'analyze': ask the running foreman to analyze the current agent's transcript and push a
-// plain-English what/why report to the Story feed. NON-disruptive (the run keeps going), so — unlike
-// setControl — no confirm and no pending/disable state; the report appears under the Story tab shortly.
-async function requestAnalyze(){
-  const id = selInst();
-  if (!id){ log("pick an instance first", true); return; }
-  try{
-    await pipeline(
-      "INSERT INTO foreman_control(id,command,requested_at,requested_by,ack_at) "+
-      "VALUES(?,?,?,'phone',NULL) ON CONFLICT(id) DO UPDATE SET "+
-      "command=excluded.command, requested_at=excluded.requested_at, requested_by='phone', ack_at=NULL",
-      [arg(id), arg('analyze'), arg(new Date().toISOString())]);
-    log("["+id+"] analysis requested — the report will appear under the Story tab shortly (~a minute).");
-    refresh();
-  } catch(e){ log("analyze request failed: "+e.message, true); }
 }
 
 // Item 2: interactive step-status Q&A. The phone has no local compute, so it POSTS a question to the

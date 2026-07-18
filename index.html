@@ -110,15 +110,6 @@
        that can't do its job is never buried behind a tab. Driven from foreman_status.attention. -->
   <div class="attn" id="attn" hidden onclick="showTab('status')"></div>
 
-  <!-- Item 3 worker hook-safeguard: FLAGGED ambient hooks your workers INHERIT (from your Claude
-       settings / the target repo / enabled plugins) that the foreman never declared + you haven't
-       blessed. Always-visible (like #attn) so it's never buried. Driven from foreman_status.hooks. -->
-  <div class="card" id="hookcard" hidden style="border:1px solid var(--warn)">
-    <div style="font-weight:600;margin-bottom:2px">⚠ Ambient hooks need your review</div>
-    <div class="muted" style="margin:0 0 8px">Your workers inherit these hooks — the foreman didn't declare them and can't remove them, so it's flagging them for you. <b>Bless</b> the ones you trust (cached, never asked again); <b>Hold</b> the ones you don't.</div>
-    <div id="hooklist"></div>
-  </div>
-
   <div class="tabs">
     <button class="tab active" id="tab-status" onclick="showTab('status')">Status</button>
     <button class="tab" id="tab-qa" onclick="showTab('qa')">Step Q&amp;A</button>
@@ -502,49 +493,9 @@ function renderSelected(){
   $("command").textContent = c.command || "none";
   $("ack").textContent = c.ack_at ? localTs(c.ack_at) : "—";   // local time, not raw Zulu
   setControlBtns(s ? s.state : "");   // state-aware run controls: bright = the live action, dim = inert
-  renderHooks();   // Item 3: the flagged ambient-hook card (bless/hold)
 }
 
 function onInstanceChange(){ localStorage.setItem(LS_INST, $("instance").value); renderSelected(); renderQueue(); }
-
-// Item 3 worker hook-safeguard: render the FLAGGED ambient hooks (foreman_status.hooks, a JSON array
-// the foreman pushes) with a plain-English brief + Bless/Hold buttons. Bless caches the hook's
-// fingerprint in the allowlist (never flagged again); Hold leaves it flagged. Empty/absent -> card hidden.
-function renderHooks(){
-  const card = $("hookcard"); if(!card) return;
-  const s = lastStatus.find(r => r.id === selInst());
-  let hooks = [];
-  try { hooks = (s && s.hooks) ? JSON.parse(s.hooks) : []; } catch(e){ hooks = []; }
-  if(!Array.isArray(hooks) || !hooks.length){ card.hidden = true; $("hooklist").innerHTML = ""; return; }
-  card.hidden = false;
-  $("hooklist").innerHTML = hooks.map(h => {
-    const fp = String(h.fingerprint||"");
-    const tier = String(h.tier||"?");
-    const col = tier==="HIGH" ? "var(--bad)" : (tier==="MEDIUM" ? "var(--warn)" : "var(--mut)");
-    return "<div class='srow' style='margin-bottom:10px;border-left:3px solid "+col+";padding-left:8px'>"
-      + "<div style='font-weight:600'>"+esc(String(h.event||"?"))+" <span style='color:"+col+"'>["+esc(tier)+"]</span>"
-      + (h.matcher ? " <span class='muted'>on "+esc(String(h.matcher))+"</span>" : "")+"</div>"
-      + "<div class='muted' style='white-space:pre-wrap;margin:4px 0'>"+esc(String(h.brief||""))+"</div>"
-      + "<div class='btns'><button class='b-resume' onclick=\"hookDecision('"+esc(fp)+"','bless')\">Bless</button>"
-      + "<button class='b-pause' onclick=\"hookDecision('"+esc(fp)+"','hold')\">Hold</button></div>"
-      + "</div>";
-  }).join("");
-}
-const HOOK_DDL = "CREATE TABLE IF NOT EXISTS foreman_hook_ctl (id TEXT, fingerprint TEXT, decision TEXT, requested_at TEXT, requested_by TEXT, PRIMARY KEY (id, fingerprint))";
-async function hookDecision(fp, decision){
-  const id = selInst();
-  if(!id){ log("pick an instance first", true); return; }
-  if(decision==="bless" && !confirm("Bless this hook for '"+id+"'? It will be TRUSTED for every worker and won't be flagged again (until its script changes).")) return;
-  try{
-    await pipeline(HOOK_DDL);   // idempotent — works even before the foreman first creates the table
-    await pipeline(
-      "INSERT INTO foreman_hook_ctl(id,fingerprint,decision,requested_at,requested_by) VALUES(?,?,?,?,'phone') "+
-      "ON CONFLICT(id,fingerprint) DO UPDATE SET decision=excluded.decision, requested_at=excluded.requested_at, requested_by='phone'",
-      [arg(id), arg(fp), arg(decision), arg(new Date().toISOString())]);
-    log("["+id+"] hook "+decision+" -> "+fp+" (applies on the foreman's next cycle)");
-    refresh();
-  } catch(e){ log("hook "+decision+" failed: "+e.message, true); }
-}
 
 function renderQueue(){
   const row = lastQueue.find(r => r.id === selInst());

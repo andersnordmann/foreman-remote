@@ -651,7 +651,7 @@ async function qaAsk(){
       "VALUES(?,?,?,?,NULL,?,NULL,'phone')",
       [arg(id), arg(seq), arg('latest'), arg(qtext), arg(new Date().toISOString())]);
     $("qaInput").value = "";
-    log("["+id+"] asked — received. The foreman answers from the running step's transcript at its next poll (between steps).");
+    log("["+id+"] asked — received. The foreman answers from the running step's transcript within about a minute while it runs.");
     renderQA();
   } catch(e){ log("ask failed: "+e.message, true); }
 }
@@ -686,7 +686,7 @@ async function renderQA(){
       // PENDING -> the Ask button carries the state (discoverable, right where you ask; re-ask allowed).
       if (btn){ btn.textContent = "⏳ Awaiting answer · tap to re-ask"; btn.disabled = false; }
       box.innerHTML = "<div style='font-weight:600'>"+q+"</div>"
-        + "<div class='muted' style='margin-top:4px'>&#10003; received "+askedTs+" — the foreman replies from the running step's transcript at its next poll.</div>";
+        + "<div class='muted' style='margin-top:4px'>&#10003; received "+askedTs+" — the foreman replies from the running step's transcript within about a minute while it runs.</div>";
     }
   } catch(e){ if (btn){ btn.textContent = "Ask"; btn.disabled = false; } box.innerHTML = "<div class='muted'>Q&amp;A unavailable: "+esc(e.message)+"</div>"; }
 }

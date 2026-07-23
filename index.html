@@ -652,7 +652,7 @@ async function qaAsk(){
       "VALUES(?,?,?,?,NULL,?,NULL,'phone')",
       [arg(id), arg(seq), arg('latest'), arg(qtext), arg(new Date().toISOString())]);
     $("qaInput").value = "";
-    log("["+id+"] asked — the foreman answers from the transcript shortly (~a minute).");
+    log("["+id+"] asked — received. The foreman answers from the running step's transcript at its next poll (between steps).");
     renderQA();
   } catch(e){ log("ask failed: "+e.message, true); }
 }
@@ -661,12 +661,21 @@ async function renderQA(){
   const id = selInst(); if(!id){ box.innerHTML = "<div class='muted'>pick an instance first</div>"; return; }
   try{
     await pipeline(QA_DDL);
-    const rows = await pipeline("SELECT seq,question,answer FROM foreman_qa WHERE id=? ORDER BY seq", [arg(id)]);
+    const rows = await pipeline("SELECT seq,question,answer,asked_at,answered_at FROM foreman_qa WHERE id=? ORDER BY seq", [arg(id)]);
     if(!rows.length){ box.innerHTML = "<div class='muted'>No questions yet. Ask about the running step to decide whether to stop it.</div>"; return; }
     box.innerHTML = rows.map(r => {
       const q = r.question ? esc(r.question) : "(status + stop/continue recommendation)";
-      const a = r.answer ? esc(r.answer) : "<span class='muted'>…the foreman is answering from the transcript (~a minute)…</span>";
-      return "<div class='srow' style='margin-bottom:10px'><div style='font-weight:600;margin-bottom:4px'>Q"+r.seq+": "+q+"</div><div style='white-space:pre-wrap'>"+a+"</div></div>";
+      const asked = r.asked_at ? esc(localTs(r.asked_at)) : "";
+      // ACK line — shown the instant the ask lands (asked_at is written on INSERT), so the user can SEE it registered.
+      const askedLine = "<div class='muted' style='font-size:.82em;margin-bottom:4px'>&#10003; received "+asked+"</div>";
+      let aBlock;
+      if (r.answer) {
+        const ans = r.answered_at ? esc(localTs(r.answered_at)) : "";
+        aBlock = "<div class='muted' style='font-size:.82em;margin:6px 0 2px'>answered "+ans+"</div><div style='white-space:pre-wrap'>"+esc(r.answer)+"</div>";
+      } else {
+        aBlock = "<div class='muted'>&#9203; awaiting the foreman&#39;s answer &mdash; it replies from the running step&#39;s transcript at its next poll (between steps).</div>";
+      }
+      return "<div class='srow' style='margin-bottom:14px'><div style='font-weight:600;margin-bottom:2px'>Q"+r.seq+": "+q+"</div>"+askedLine+aBlock+"</div>";
     }).join("");
   } catch(e){ box.innerHTML = "<div class='muted'>Q&amp;A unavailable: "+esc(e.message)+"</div>"; }
 }

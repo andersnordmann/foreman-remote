@@ -651,7 +651,7 @@ async function qaAsk(){
       "VALUES(?,?,?,?,NULL,?,NULL,'phone')",
       [arg(id), arg(seq), arg('latest'), arg(qtext), arg(new Date().toISOString())]);
     $("qaInput").value = "";
-    log("["+id+"] asked — received. The foreman answers from the running step's transcript within about a minute while it runs.");
+    log("["+id+"] asked — queued. The foreman answers between steps: about a minute while a worker runs; a long verify or data-generation phase can delay the reply until it finishes.");
     renderQA();
   } catch(e){ log("ask failed: "+e.message, true); }
 }
@@ -685,8 +685,14 @@ async function renderQA(){
     } else {
       // PENDING -> the Ask button carries the state (discoverable, right where you ask; re-ask allowed).
       if (btn){ btn.textContent = "⏳ Awaiting answer · tap to re-ask"; btn.disabled = false; }
+      // HONEST timing: the foreman answers Q&A between/within steps. While a WORKER runs it is ~a minute;
+      // during a long verify (gate) or data-generation (seed) phase it can wait until that phase ends.
+      // Show elapsed so a long wait is visible rather than promising a minute we can't keep.
+      const waited = (!isNaN(askedT)) ? Math.max(0, Math.round((Date.now()-askedT)/60000)) : null;
+      const waitStr = (waited===null) ? "" : (waited<1 ? " · just now" : " · "+waited+" min ago");
       box.innerHTML = "<div style='font-weight:600'>"+q+"</div>"
-        + "<div class='muted' style='margin-top:4px'>&#10003; received "+askedTs+" — the foreman replies from the running step's transcript within about a minute while it runs.</div>";
+        + "<div class='muted' style='margin-top:4px'>&#10003; ask received "+askedTs+waitStr+" — waiting for the foreman to answer. "
+        + "It replies between steps: about a minute while a worker runs, but a long verify or data-generation phase can delay it until that phase finishes.</div>";
     }
   } catch(e){ if (btn){ btn.textContent = "Ask"; btn.disabled = false; } box.innerHTML = "<div class='muted'>Q&amp;A unavailable: "+esc(e.message)+"</div>"; }
 }

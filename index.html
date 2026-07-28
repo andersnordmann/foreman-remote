@@ -182,8 +182,14 @@
        ACTUAL transcript (read-only, non-disruptive) so you can decide whether to stop it. Multi-turn. -->
   <div class="tabpane" id="pane-qa" hidden>
     <div class="card">
-      <div class="muted" style="margin-bottom:8px">Ask about the <b>running step</b> — the foreman answers from its actual transcript (read-only, safe), so you can decide whether to stop it. Leave the box empty for a status + stop/continue recommendation, or type a follow-up.</div>
-      <textarea id="qaInput" rows="2" placeholder="e.g. is it stuck? what has it changed? — or leave blank for a status + stop recommendation" style="width:100%;box-sizing:border-box"></textarea>
+      <div class="muted" style="margin-bottom:8px">Ask about the <b>running step</b> (to decide whether to stop it) or about the <b>whole run</b> (progress, cost, what is done or stuck) - the foreman answers from the real transcript / run history (read-only, safe). Leave the box empty for a status + stop/continue recommendation, or type any question.</div>
+      <div class="muted" style="margin-bottom:6px">Scope:
+        <select id="qaScope" style="margin-left:6px;padding:2px 6px">
+          <option value="latest">the running step (default)</option>
+          <option value="run">the whole run (ask anything)</option>
+        </select>
+      </div>
+      <textarea id="qaInput" rows="2" placeholder="e.g. is it stuck? what has it changed? - or, for the whole run: how much is done? cost so far? anything stuck?" style="width:100%;box-sizing:border-box"></textarea>
       <div class="btns" style="grid-template-columns:1fr;margin-top:8px">
         <button id="qaAskBtn" class="b-resume" onclick="qaAsk()">Ask</button>
       </div>
@@ -647,9 +653,10 @@ async function qaAsk(){
     await pipeline(QA_DDL);   // idempotent — works even before the foreman first creates the table
     const rows = await pipeline("SELECT COALESCE(MAX(seq),0)+1 AS nxt FROM foreman_qa WHERE id=?", [arg(id)]);
     const seq = (rows[0] && rows[0].nxt) ? rows[0].nxt : 1;
+    const scope = ($("qaScope") && $("qaScope").value) || 'latest';   // 'latest' = running step (default); 'run' = whole run (ask anything)
     await pipeline("INSERT INTO foreman_qa(id,seq,session,question,answer,asked_at,answered_at,asked_by) "+
       "VALUES(?,?,?,?,NULL,?,NULL,'phone')",
-      [arg(id), arg(seq), arg('latest'), arg(qtext), arg(new Date().toISOString())]);
+      [arg(id), arg(seq), arg(scope), arg(qtext), arg(new Date().toISOString())]);
     $("qaInput").value = "";
     log("["+id+"] asked — queued. The foreman answers between steps: about a minute while a worker runs; a long verify or data-generation phase can delay the reply until it finishes.");
     renderQA();

@@ -662,6 +662,24 @@ async function qaAsk(){
     renderQA();
   } catch(e){ log("ask failed: "+e.message, true); }
 }
+function populateStepPicker(recentStepsJson){
+  // Rebuild the Scope dropdown: the running step (default) + each recent PAST step (labelled by the
+  // report/item it worked + time) + the whole run. The recent steps come from foreman_status.recent_steps
+  // (published by the foreman). Preserves the user's current selection across refreshes.
+  const sel = $("qaScope"); if(!sel) return;
+  const prev = sel.value;
+  let steps = [];
+  try { steps = recentStepsJson ? (JSON.parse(recentStepsJson) || []) : []; } catch(e){ steps = []; }
+  let html = '<option value="latest">the running step (default)</option>';
+  for (const s of steps){
+    if(!s || !s.session) continue;
+    const lbl = esc(String(s.label || s.item || 'a step') + (s.at ? ' - ' + s.at : ''));
+    html += '<option value="'+esc(String(s.session))+'">'+lbl+'</option>';
+  }
+  html += '<option value="run">the whole run (ask anything)</option>';
+  sel.innerHTML = html;
+  if (prev && Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
+}
 async function renderQA(){
   const btn = $("qaAskBtn"), box = $("qaLatest"); if(!box) return;
   const id = selInst(); if(!id){ box.innerHTML = "<div class='muted'>pick an instance first</div>"; return; }
@@ -670,7 +688,8 @@ async function renderQA(){
     // A question is a RIGHT-NOW thing: show ONLY the latest turn, and only if it belongs to the CURRENT
     // run (asked at/after run_started_at). A days-old ask from a prior run is stale -> the control just
     // reads "Ask". No multi-day Q1/Q2 thread; the Ask button itself carries the live state.
-    const st = await pipeline("SELECT run_started_at FROM foreman_status WHERE id=?", [arg(id)]);
+    const st = await pipeline("SELECT run_started_at, recent_steps FROM foreman_status WHERE id=?", [arg(id)]);
+    populateStepPicker(st.length ? st[0].recent_steps : "");   // Q&A step-picker: current step + recent past steps + whole run
     const runStart = (st.length && st[0].run_started_at) ? parseTs(st[0].run_started_at) : NaN;
     const rows = await pipeline("SELECT seq,question,answer,asked_at,answered_at FROM foreman_qa WHERE id=? ORDER BY seq DESC LIMIT 1", [arg(id)]);
     const r = rows.length ? rows[0] : null;

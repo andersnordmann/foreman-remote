@@ -578,10 +578,19 @@ function renderSelected(){
     const cost = (costEst > 0 ? costEst
                  : (hasSplit ? (tin/1e6*5 + tcr/1e6*0.5 + tcw/1e6*6.25 + tout/1e6*25)
                              : (tin/1e6*5 + tout/1e6*25))).toFixed(2);
+    // PROVISIONAL WHILE A TURN IS RUNNING. The figure used to be built only from COMPLETED turns, so it
+    // sat at $0.00 for the whole of a long turn while money was going out (measured: $16.30 into a turn
+    // showing zero). The beater now prices the in-flight transcript too, which means that while the run
+    // is working, the last turn's share of this number is an ESTIMATE — replaced by the exact figure the
+    // moment that turn ends. Say so, rather than letting a moving number read as settled. The existing
+    // "≈" already covers a different caveat (notional API pricing on a subscription), so it cannot carry
+    // this one as well.
+    const spendLive = String(s.state||"").toLowerCase() === "running";
+    const spendNote = spendLive ? " · current turn still running (estimate)" : "";
     $("tokens").textContent = (tin || tout || tcr || tcw)
       ? (hasSplit
-          ? fmtTok(tin) + " input + " + fmtTok(tcr + tcw) + " cached · " + fmtTok(tout) + " output · ≈ $" + cost + " API-equiv"
-          : fmtTok(tin) + " input / " + fmtTok(tout) + " output · ≈ $" + cost + " API-equiv")
+          ? fmtTok(tin) + " input + " + fmtTok(tcr + tcw) + " cached · " + fmtTok(tout) + " output · ≈ $" + cost + " API-equiv" + spendNote
+          : fmtTok(tin) + " input / " + fmtTok(tout) + " output · ≈ $" + cost + " API-equiv" + spendNote)
       : "—";
     // per-model breakdown (total tokens per model) — shown once >1 model has run (e.g. a challenger),
     // so the per-model tracking behind the cost is visible; hidden for a worker-only run.

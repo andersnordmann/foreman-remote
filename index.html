@@ -212,6 +212,13 @@
         </div>
         <div class="stepper" id="stepper"></div>
         <div class="grp">
+          <div class="grp-k">this cycle</div>
+          <div class="tiles">
+            <div class="tile"><div class="t-k">started</div><div class="t-v" id="cycleSince">—</div></div>
+            <div class="tile"><div class="t-k">running for</div><div class="t-v" id="cycleFor">—</div></div>
+          </div>
+        </div>
+        <div class="grp">
           <div class="grp-k">current step</div>
           <div class="tiles">
             <div class="tile"><div class="t-k">started</div><div class="t-v" id="activitySince">—</div></div>
@@ -507,6 +514,16 @@ function renderSelected(){
     // alone when it is today and prefixes the date when it is not, so an old timestamp cannot masquerade
     // as a recent one.
     $("activitySince").textContent = (s.state === "running" && s.last_result && s.updated_at) ? tileTs(s.updated_at) : "—";
+    // THIS CYCLE, a scope wider than the step above. A cycle spans pre-work -> worker -> gate -> commit
+    // and every one of those phases moves updated_at, so the step tiles reset mid-cycle and there was no
+    // way to see how long the cycle itself had been going — the number you want when judging whether a
+    // cycle is dragging. batch_started_at is stamped once per cycle by the foreman.
+    // FROZEN when not running: end at the last beat, not the live clock, so a stopped/done/crashed run
+    // shows the cycle's final length instead of ticking up forever (same rule as the whole-run total).
+    const cycT = parseTs(s.batch_started_at);
+    const cycEnd = (s.state === "running") ? now : (parseTs(s.last_beat) || now);
+    $("cycleSince").textContent = isNaN(cycT) ? "—" : tileTs(s.batch_started_at);
+    $("cycleFor").textContent   = isNaN(cycT) ? "—" : durStrS(Math.max(0,(cycEnd-cycT))/1000);
     // start time + whole-run total (since foreman start) + liveness. "beat Ns ago" is the beater's
     // last_beat (refreshed every ~25s) — the single freshness/liveness field. "started"/"run" only
     // appear when a run is present (run_started_at set); else just the beat.
@@ -608,7 +625,7 @@ function renderSelected(){
   } else {
     $("state").textContent = lastStatus.length ? "select an instance" : "no status yet";
     $("dot").style.background = "var(--mut)"; $("state").style.color = "";
-    $("batch").textContent = $("item").textContent = $("pending").textContent = $("kills").textContent = $("tokens").textContent = $("byModel").textContent = $("activity").textContent = $("activitySince").textContent = "—";
+    $("batch").textContent = $("item").textContent = $("pending").textContent = $("kills").textContent = $("tokens").textContent = $("byModel").textContent = $("activity").textContent = $("activitySince").textContent = $("cycleSince").textContent = $("cycleFor").textContent = "—";
     renderStepper("");   // no instance selected -> show the sequence with no step marked
     $("ago").textContent = lastStatus.length ? "—" : "foreman has not reported";
   }

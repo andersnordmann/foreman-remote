@@ -111,10 +111,27 @@
      group with its own coloured spine: the STEP - the live thing - takes the accent, the CYCLE a neutral
      line. The group caption carries the scope, so the tile labels inside can stay short. */
   .grp { border-left:3px solid var(--accent); padding-left:9px; margin:12px 0 0; }
-  .grp-cycle { border-left-color:var(--line); }
   .grp-k { color:var(--mut); font-size:11px; font-weight:700; letter-spacing:.7px;
            text-transform:uppercase; margin-bottom:5px; }
   .tiles { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin:0; }
+  /* A cycle CONTAINS steps - they are not peers, which two side-by-side groups implied (akn: "it doesn't
+     visualize that a cycle has multiple steps"). The cycle is the OUTER box: its own numbers sit in its
+     header, the ordered sequence of steps a cycle runs through is drawn inside it, and the LIVE step's
+     detail is nested one level further in. So the containment is visible, and the step list shows there
+     are several of them even before you watch it move. */
+  .cyc { border:1px solid var(--line); border-radius:12px; padding:10px 11px 11px; margin:12px 0 4px;
+         background:#0d1218; }
+  .cyc-head { display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .cyc-t { font-size:12px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; color:var(--mut); }
+  .cyc-t b { font-size:17px; color:var(--fg); margin-left:5px; letter-spacing:0; }
+  .cyc-x { font-size:12px; color:var(--mut); }
+  .cyc-x b { font-size:15px; color:var(--fg); margin-right:3px; }
+  .stepper { display:flex; align-items:center; flex-wrap:wrap; gap:4px; margin:9px 0 0; }
+  .stp { font-size:11px; color:var(--mut); background:#0b0f14; border:1px solid var(--line);
+         border-radius:999px; padding:3px 9px; white-space:nowrap; }
+  .stp-now { color:#fff; background:rgba(56,139,253,.20); border-color:var(--accent); font-weight:700; }
+  .stp-sep { color:var(--line); font-size:10px; }
+  .cyc .grp { margin:10px 0 0; }   /* the live step's numbers, nested inside the cycle box */
   .tile { background:#0b0f14; border:1px solid var(--line); border-radius:10px; padding:8px 9px; min-width:0; }
   .t-k { color:var(--mut); font-size:11px; letter-spacing:.4px; text-transform:uppercase; white-space:nowrap;
          overflow:hidden; text-overflow:ellipsis; }
@@ -177,18 +194,20 @@
            cycle - it re-anchors at every phase change, so during a gate it shows the GATE's start.
            `tokens`/`by model` stay as rows: tokens carries a long composite string (input + cached +
            output + API-equivalent cost) that a tile would mangle. -->
-      <div class="grp">
-        <div class="grp-k">this step</div>
-        <div class="tiles">
-          <div class="tile"><div class="t-k">started</div><div class="t-v" id="activitySince">—</div></div>
-          <div class="tile"><div class="t-k">running for</div><div class="t-v" id="kills">—</div></div>
+      <!-- The CYCLE, as the container it is: its own numbers in the header, the ordered steps it runs
+           through beneath them, and the LIVE step's detail nested inside. -->
+      <div class="cyc">
+        <div class="cyc-head">
+          <span class="cyc-t">cycle<b id="batch">—</b></span>
+          <span class="cyc-x"><b id="pending">—</b>tasks left</span>
         </div>
-      </div>
-      <div class="grp grp-cycle">
-        <div class="grp-k">this cycle</div>
-        <div class="tiles">
-          <div class="tile"><div class="t-k">number</div><div class="t-v" id="batch">—</div></div>
-          <div class="tile"><div class="t-k">tasks left</div><div class="t-v" id="pending">—</div></div>
+        <div class="stepper" id="stepper"></div>
+        <div class="grp">
+          <div class="grp-k">current step</div>
+          <div class="tiles">
+            <div class="tile"><div class="t-k">started</div><div class="t-v" id="activitySince">—</div></div>
+            <div class="tile"><div class="t-k">running for</div><div class="t-v" id="kills">—</div></div>
+          </div>
         </div>
       </div>
       <hr style="border:0;border-top:1px solid var(--line);margin:8px 0;opacity:.45">
@@ -471,6 +490,7 @@ function renderSelected(){
     // activity = last_result: the live phase while running (worker / gate / committing /
     // challenge), the batch outcome while idle. Lets the user see WHAT is happening.
     $("activity").textContent = s.last_result || "—";
+    renderStepper(s.last_result);   // mark which of the cycle's steps is live
     // activity since = when the current phase started. updated_at moves ONLY on a real phase
     // heartbeat (worker/gate/committing/challenge) — NOT on the 25s liveness beat (that is last_beat)
     // — so this is the phase's true start; only meaningful while running (idle => the outcome).
@@ -571,6 +591,7 @@ function renderSelected(){
     $("state").textContent = lastStatus.length ? "select an instance" : "no status yet";
     $("dot").style.background = "var(--mut)"; $("state").style.color = "";
     $("batch").textContent = $("item").textContent = $("pending").textContent = $("kills").textContent = $("tokens").textContent = $("byModel").textContent = $("activity").textContent = $("activitySince").textContent = "—";
+    renderStepper("");   // no instance selected -> show the sequence with no step marked
     $("ago").textContent = lastStatus.length ? "—" : "foreman has not reported";
   }
   $("command").textContent = c.command || "none";
@@ -679,6 +700,31 @@ function localTs(iso){
   const t = parseTs(iso); if (isNaN(t)) return iso;
   const d = new Date(t), p = n => String(n).padStart(2,"0");
   return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds());
+}
+// The steps EVERY cycle runs through, in the order the foreman's loop performs them: seed generation ->
+// pre-work baseline capture -> the worker turn -> the quality gate (which includes the adversarial
+// challenge ladder) -> commit. Drawn as a SEQUENCE so the page shows that a cycle contains several steps,
+// not only whichever one happens to be live. The keys are matched against the foreman's OWN phase text -
+// the engine writes these phrases, so this is engine vocabulary, not the migration project's.
+const CYCLE_STEPS = [
+  ["seed",   ["seed"]],
+  ["prep",   ["pre-work", "baseline", "preparing"]],
+  ["work",   ["working on", "worker"]],
+  ["check",  ["quality check", "gate", "challenge", "verif"]],
+  ["commit", ["commit"]],
+];
+function renderStepper(phase){
+  const el = $("stepper"); if (!el) return;
+  const p = String(phase || "").toLowerCase();
+  let cur = -1;
+  // prep is tested BEFORE work deliberately: "pre-work" contains "work", so the looser key would win.
+  for (let i = 0; i < CYCLE_STEPS.length && cur < 0; i++)
+    if (CYCLE_STEPS[i][1].some(k => p.includes(k))) cur = i;
+  // No match -> nothing is marked. An unrecognised phase must never light up the WRONG step; the reader
+  // still sees the sequence, just without a current marker.
+  el.innerHTML = CYCLE_STEPS
+    .map(([name], i) => `<span class="stp${i === cur ? " stp-now" : ""}">${esc(name)}</span>`)
+    .join('<span class="stp-sep">&#9656;</span>');
 }
 function tileTs(iso){
   // Compact form for a TILE, where a full "YYYY-MM-DD HH:MM:SS" wraps to three lines: the clock alone

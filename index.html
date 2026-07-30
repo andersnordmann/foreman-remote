@@ -131,6 +131,11 @@
          border-radius:999px; padding:3px 9px; white-space:nowrap; }
   .stp-now { color:#fff; background:rgba(56,139,253,.20); border-color:var(--accent); font-weight:700; }
   .stp-sep { color:var(--line); font-size:10px; }
+  /* the conditional review path: dashed = a cycle MAY run these, on its own row under the main path */
+  .stepper-x { display:flex; align-items:center; flex-wrap:wrap; gap:4px; width:100%; margin:7px 0 0; }
+  .stepper-k { color:var(--mut); font-size:10px; font-weight:700; letter-spacing:.6px;
+               text-transform:uppercase; margin-right:3px; }
+  .stp-opt { border-style:dashed; }
   .cyc .grp { margin:10px 0 0; }   /* the live step's numbers, nested inside the cycle box */
   .tile { background:#0b0f14; border:1px solid var(--line); border-radius:10px; padding:8px 9px; min-width:0; }
   .t-k { color:var(--mut); font-size:11px; letter-spacing:.4px; text-transform:uppercase; white-space:nowrap;
@@ -706,25 +711,47 @@ function localTs(iso){
 // challenge ladder) -> commit. Drawn as a SEQUENCE so the page shows that a cycle contains several steps,
 // not only whichever one happens to be live. The keys are matched against the foreman's OWN phase text -
 // the engine writes these phrases, so this is engine vocabulary, not the migration project's.
+// The MAIN path every cycle walks, in the order the foreman's loop performs it.
 const CYCLE_STEPS = [
   ["seed",   ["seed"]],
   ["prep",   ["pre-work", "baseline", "preparing"]],
   ["work",   ["working on", "worker"]],
-  ["check",  ["quality check", "gate", "challenge", "verif"]],
+  ["check",  ["quality check", "gate"]],
   ["commit", ["commit"]],
+];
+// The CONDITIONAL review path, which runs AFTER the gate and only when a cycle needs it. These were
+// wrong in the first version: "challenge" was folded into `check`, and the other two were missing
+// altogether, so a cycle spent adjudicating or critiquing lit up nothing at all. Verified against the
+// engine's own phase strings: the challenge ladder runs at foreman.ps1:2646 - after the post-gate stop
+// check and after commit-or-revert, NOT inside the gate - and the other two are pushed by
+// Set-ActiveWorker ("adjudicating <item> - a skeptic agent ...", "completeness-critic on <item> ...").
+// Drawn dashed on their own row: they are steps a cycle MAY run, not ones it always does.
+const CYCLE_EXTRA = [
+  ["adjudicate", ["adjudicat"]],
+  ["critic",     ["critic"]],
+  ["challenge",  ["challenge"]],
 ];
 function renderStepper(phase){
   const el = $("stepper"); if (!el) return;
   const p = String(phase || "").toLowerCase();
-  let cur = -1;
-  // prep is tested BEFORE work deliberately: "pre-work" contains "work", so the looser key would win.
-  for (let i = 0; i < CYCLE_STEPS.length && cur < 0; i++)
-    if (CYCLE_STEPS[i][1].some(k => p.includes(k))) cur = i;
-  // No match -> nothing is marked. An unrecognised phase must never light up the WRONG step; the reader
-  // still sees the sequence, just without a current marker.
-  el.innerHTML = CYCLE_STEPS
+  // The conditional steps are matched FIRST because they are the more specific phrases; within the main
+  // path, prep is tested before work because "pre-work" and "pre-worker" both contain "work".
+  let curX = -1, cur = -1;
+  for (let i = 0; i < CYCLE_EXTRA.length && curX < 0; i++)
+    if (CYCLE_EXTRA[i][1].some(k => p.includes(k))) curX = i;
+  if (curX < 0)
+    for (let i = 0; i < CYCLE_STEPS.length && cur < 0; i++)
+      if (CYCLE_STEPS[i][1].some(k => p.includes(k))) cur = i;
+  // No match anywhere -> nothing is marked. Lighting the WRONG step is worse than lighting none; the
+  // reader still sees both paths, just with no current marker.
+  const main = CYCLE_STEPS
     .map(([name], i) => `<span class="stp${i === cur ? " stp-now" : ""}">${esc(name)}</span>`)
     .join('<span class="stp-sep">&#9656;</span>');
+  const extra = CYCLE_EXTRA
+    .map(([name], i) => `<span class="stp stp-opt${i === curX ? " stp-now" : ""}">${esc(name)}</span>`)
+    .join('<span class="stp-sep">·</span>');
+  el.innerHTML = main
+    + `<div class="stepper-x"><span class="stepper-k">only when needed</span>${extra}</div>`;
 }
 function tileTs(iso){
   // Compact form for a TILE, where a full "YYYY-MM-DD HH:MM:SS" wraps to three lines: the clock alone

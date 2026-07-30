@@ -726,10 +726,16 @@ const CYCLE_STEPS = [
 // check and after commit-or-revert, NOT inside the gate - and the other two are pushed by
 // Set-ActiveWorker ("adjudicating <item> - a skeptic agent ...", "completeness-critic on <item> ...").
 // Drawn dashed on their own row: they are steps a cycle MAY run, not ones it always does.
+// NAMED IN THE STORY FEED'S OWN WORDS, not the engine's internals (akn: "is adjudicate really the best
+// userfacing name?" - it is not). The story already describes these three plainly and never says
+// "adjudicate": it says "verified the output is actually correct - the automated check was mis-flagging
+// it", "verified a real problem no agent can resolve on its own", and "independent challenger agents now
+// competing to crack it". So the labels below reuse that vocabulary instead of inventing a third one.
+// The MATCH KEYS stay as the engine's own phase words - those are matched against machine text, never read.
 const CYCLE_EXTRA = [
-  ["adjudicate", ["adjudicat"]],
-  ["critic",     ["critic"]],
-  ["challenge",  ["challenge"]],
+  ["verify claim", ["adjudicat"]],   // a skeptic re-checks a worker's claim that a flag is not a real defect
+  ["hunt defects", ["critic"]],      // looks for defects the metrics do not measure
+  ["challengers",  ["challenge"]],   // independent agents compete to crack a stuck task
 ];
 function renderStepper(phase){
   const el = $("stepper"); if (!el) return;

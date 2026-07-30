@@ -92,6 +92,31 @@
   .qbtn.react { border-color:var(--ok); color:var(--ok); }
   .ncheck { display:flex; align-items:center; gap:9px; color:var(--fg); font-size:14px; margin:7px 0; cursor:pointer; }
   .ncheck input { width:auto; margin:0; }
+  /* Run status + story, ported from the desktop panel's Run tab (akn: "the hero line and the boxes on the
+     status part and the story look is really nice. Can that be implemented on the phone page too?").
+     SAME information and the SAME element ids as the flat key/value rows this replaces - only the emphasis
+     changes: what the run is doing THIS MOMENT reads first at hero size, the counters become scannable
+     tiles, and each story entry's clock moves into a fixed-width gutter instead of sitting inside the
+     sentence. Keeping the ids means renderSelected() needs no change at all. */
+  .hero { margin:2px 0 8px; }
+  .hero-phase { font-size:19px; font-weight:700; line-height:1.3; word-break:break-word; }
+  .hero-sub { display:flex; align-items:baseline; gap:7px; flex-wrap:wrap; margin-top:6px; font-size:13px; }
+  .hero-state { font-weight:700; }
+  .hero-on { color:var(--mut); }
+  .hero-item { font-weight:600; word-break:break-all; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(92px,1fr)); gap:8px; margin:10px 0 4px; }
+  .tile { background:#0b0f14; border:1px solid var(--line); border-radius:10px; padding:8px 9px; min-width:0; }
+  .t-k { color:var(--mut); font-size:11px; letter-spacing:.4px; text-transform:uppercase; white-space:nowrap;
+         overflow:hidden; text-overflow:ellipsis; }
+  .t-v { font-size:16px; font-weight:700; margin-top:3px; word-break:break-word; }
+  /* story: fixed-width time gutter (merges with the .srow rule above; only adds layout) + newest brightened */
+  .srow { display:flex; gap:9px; }
+  /* min-width, not just flex:0 0 auto: an entry with NO time must still line its text up with the rest,
+     otherwise a single legacy line shifts the whole column left. */
+  .s-time { flex:0 0 auto; min-width:38px; color:var(--mut);
+            font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .s-text { flex:1 1 auto; min-width:0; word-break:break-word; }
+  .s-newest .s-text { color:#fff; font-weight:600; }
 </style>
 <meta name="theme-color" content="#0e1116">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
@@ -120,18 +145,26 @@
   <div class="tabpane" id="pane-status">
     <div class="card" id="statusCard">
       <div class="overdue" id="overdue" hidden></div>
-      <div class="state" id="state">—</div>
+      <!-- NOW: what the run is doing this moment, at hero size. Every id below is unchanged from the
+           key/value rows this replaced, so renderSelected() is untouched. -->
+      <div class="hero">
+        <div class="hero-phase" id="activity">—</div>
+        <div class="hero-sub">
+          <span class="hero-state" id="state">—</span>
+          <span class="hero-on" id="heroOn"></span>
+          <span class="hero-item" id="item">—</span>
+        </div>
+      </div>
       <div class="muted" id="ago">not connected</div>
-      <hr style="border:0;border-top:1px solid var(--line);margin:10px 0">
-      <!-- NOW: what the run is doing this moment -->
-      <div class="row"><span class="k">item</span><span class="v" id="item">—</span></div>
-      <div class="row"><span class="k">activity</span><span class="v" id="activity">—</span></div>
-      <div class="row"><span class="k">activity since</span><span class="v" id="activitySince">—</span></div>
-      <div class="row"><span class="k">runtime</span><span class="v" id="kills">—</span></div>
+      <!-- RUN SO FAR: the counters, as tiles. `tokens`/`by model` stay as rows: tokens carries a long
+           composite string (input + cached + output + API-equivalent cost) that a tile would mangle. -->
+      <div class="tiles">
+        <div class="tile"><div class="t-k">cycle</div><div class="t-v" id="batch">—</div></div>
+        <div class="tile"><div class="t-k">tasks left</div><div class="t-v" id="pending">—</div></div>
+        <div class="tile"><div class="t-k">this step</div><div class="t-v" id="kills">—</div></div>
+      </div>
       <hr style="border:0;border-top:1px solid var(--line);margin:8px 0;opacity:.45">
-      <!-- RUN SO FAR: progress through the queue + accumulated cost -->
-      <div class="row"><span class="k">cycle</span><span class="v" id="batch">—</span></div>
-      <div class="row"><span class="k">pending items</span><span class="v" id="pending">—</span></div>
+      <div class="row"><span class="k">activity since</span><span class="v" id="activitySince">—</span></div>
       <div class="row"><span class="k">tokens</span><span class="v" id="tokens">—</span></div>
       <div class="row"><span class="k">by model</span><span class="v" id="byModel">—</span></div>
       <hr style="border:0;border-top:1px solid var(--line);margin:8px 0;opacity:.45">
@@ -394,6 +427,8 @@ function renderSelected(){
     $("dot").style.background = $("state").style.color = COLORS[s.state] || "var(--mut)";
     $("batch").textContent = s.batch ?? "—";
     $("item").textContent = s.last_item || "—";
+    // hero caption: only say "working on" when there IS an item, so the hero never reads "stopped working on —"
+    $("heroOn").textContent = (s.last_item && String(s.last_item).trim()) ? "working on" : "";
     $("pending").textContent = s.pending ?? "—";
     // activity = last_result: the live phase while running (worker / gate / committing /
     // challenge), the batch outcome while idle. Lets the user see WHAT is happening.
@@ -549,8 +584,19 @@ function renderStory(){
   const s = lastStatus.find(r => r.id === selInst());
   let story = [];
   try { story = JSON.parse((s && s.story) || "[]"); } catch(e){ story = []; }
+  // Lift each entry's clock out of the sentence into a fixed-width gutter, and brighten the newest line
+  // (the feed is newest-first, so index 0). The foreman writes entries as "[HH:MM] text"; anything else -
+  // an older entry, a hand-written line - renders with an EMPTY gutter and its text unchanged, so no entry
+  // is ever dropped or mangled by the split. Mirrors the desktop panel's _split_story_line treatment.
   $("storylist").innerHTML = (Array.isArray(story) && story.length)
-    ? story.map(l => `<div class="srow">${esc(l)}</div>`).join("")
+    ? story.map((l, i) => {
+        const m = String(l).match(/^\s*\[(\d{1,2}:\d{2}(?::\d{2})?)\]\s*([\s\S]*)$/);
+        const t   = m ? m[1] : "";
+        const txt = (m ? m[2] : String(l)).trim();
+        return `<div class="srow${i === 0 ? " s-newest" : ""}">`
+             + `<span class="s-time">${esc(t)}</span>`
+             + `<span class="s-text">${esc(txt)}</span></div>`;
+      }).join("")
     : "<div class='muted'>No story yet — it fills in as the run works.</div>";
 }
 

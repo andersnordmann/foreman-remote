@@ -111,6 +111,9 @@
      group with its own coloured spine: the STEP - the live thing - takes the accent, the CYCLE a neutral
      line. The group caption carries the scope, so the tile labels inside can stay short. */
   .grp { border-left:3px solid var(--accent); padding-left:9px; margin:12px 0 0; }
+  /* No accent, but the border STAYS (transparent) so the tiles keep the same 9px inset and line up with
+     the accented group above - dropping the border instead would shift this block 3px left. */
+  .grp-flat { border-left-color:transparent; }
   .grp-k { color:var(--mut); font-size:11px; font-weight:700; letter-spacing:.7px;
            text-transform:uppercase; margin-bottom:5px; }
   .tiles { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin:0; }
@@ -212,17 +215,19 @@
         </div>
         <div class="stepper" id="stepper"></div>
         <div class="grp">
-          <div class="grp-k">this cycle</div>
-          <div class="tiles">
-            <div class="tile"><div class="t-k">started</div><div class="t-v" id="cycleSince">—</div></div>
-            <div class="tile"><div class="t-k">running for</div><div class="t-v" id="cycleFor">—</div></div>
-          </div>
-        </div>
-        <div class="grp">
           <div class="grp-k">current step</div>
           <div class="tiles">
             <div class="tile"><div class="t-k">started</div><div class="t-v" id="activitySince">—</div></div>
             <div class="tile"><div class="t-k">running for</div><div class="t-v" id="kills">—</div></div>
+          </div>
+        </div>
+        <!-- The cycle sits BELOW the step and carries NO accent bar: the accent marks what is happening
+             RIGHT NOW, and the cycle is the surrounding context rather than the live thing. -->
+        <div class="grp grp-flat">
+          <div class="grp-k">this cycle</div>
+          <div class="tiles">
+            <div class="tile"><div class="t-k">started</div><div class="t-v" id="cycleSince">—</div></div>
+            <div class="tile"><div class="t-k">running for</div><div class="t-v" id="cycleFor">—</div></div>
           </div>
         </div>
       </div>

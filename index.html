@@ -99,9 +99,11 @@
      tiles, and each story entry's clock moves into a fixed-width gutter instead of sitting inside the
      sentence. Keeping the ids means renderSelected() needs no change at all. */
   .hero { margin:2px 0 8px; }
-  .hero-phase { font-size:19px; font-weight:700; line-height:1.3; word-break:break-word; }
+  /* STATE stays the headline at its original .state size/colour - liveness is the first thing anyone
+     checks, so it must not be demoted below the phase sentence (akn: "the status seems demoted"). */
+  .hero-phase { font-size:15.5px; font-weight:600; line-height:1.35; margin-top:4px; word-break:break-word; }
   .hero-sub { display:flex; align-items:baseline; gap:7px; flex-wrap:wrap; margin-top:6px; font-size:13px; }
-  .hero-state { font-weight:700; }
+  .hero-sub[hidden] { display:none; }
   .hero-on { color:var(--mut); }
   .hero-item { font-weight:600; word-break:break-all; }
   .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(92px,1fr)); gap:8px; margin:10px 0 4px; }
@@ -148,9 +150,11 @@
       <!-- NOW: what the run is doing this moment, at hero size. Every id below is unchanged from the
            key/value rows this replaced, so renderSelected() is untouched. -->
       <div class="hero">
+        <div class="state" id="state">—</div>
         <div class="hero-phase" id="activity">—</div>
-        <div class="hero-sub">
-          <span class="hero-state" id="state">—</span>
+        <!-- Shown ONLY when the phase sentence does not already name the item - `last_result` usually
+             reads "working on <id> - N actions ...", so repeating the id here was pure duplication. -->
+        <div class="hero-sub" id="heroItemWrap" hidden>
           <span class="hero-on" id="heroOn"></span>
           <span class="hero-item" id="item">—</span>
         </div>
@@ -427,8 +431,15 @@ function renderSelected(){
     $("dot").style.background = $("state").style.color = COLORS[s.state] || "var(--mut)";
     $("batch").textContent = s.batch ?? "—";
     $("item").textContent = s.last_item || "—";
-    // hero caption: only say "working on" when there IS an item, so the hero never reads "stopped working on —"
-    $("heroOn").textContent = (s.last_item && String(s.last_item).trim()) ? "working on" : "";
+    // DE-DUPLICATE the hero: the phone's `last_result` sentence normally already NAMES the item
+    // ("working on <id> - N actions, last activity just now"), so restating it underneath read as the
+    // same fact twice. Show the item line only when the phase text does NOT already contain it. The
+    // element stays in the DOM either way, so nothing else that writes #item has to care.
+    const _hIt  = String(s.last_item || "").trim();
+    const _hAct = String(s.last_result || "");
+    const _hDup = !!_hIt && _hAct.includes(_hIt);
+    $("heroOn").textContent = (_hIt && !_hDup) ? "working on" : "";
+    $("heroItemWrap").hidden = (!_hIt || _hDup);
     $("pending").textContent = s.pending ?? "—";
     // activity = last_result: the live phase while running (worker / gate / committing /
     // challenge), the batch outcome while idle. Lets the user see WHAT is happening.

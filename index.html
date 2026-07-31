@@ -250,11 +250,11 @@
         <button class="b-resume" id="resumeBtn" onclick="setControl('resume')">Resume</button>
         <div class="stopwrap">
           <div class="stopsplit">
-            <button class="b-stop-main" id="stopAfterBtn" onclick="setControl('stop-after')"><span class="ss-t" id="stopMainT">Stop</span><span class="ss-sub" id="stopMainSub">after task</span></button>
+            <button class="b-stop-main" id="stopAfterBtn" onclick="setControl('stop-after')"><span class="ss-t" id="stopMainT">Stop</span><span class="ss-sub" id="stopMainSub">after cycle</span></button>
             <button class="b-stop-caret" id="stopMenuBtn" aria-haspopup="true" aria-expanded="false" aria-label="More stop options" onclick="toggleStopMenu(event)">&#9662;</button>
           </div>
           <div class="stopmenu" id="stopMenu" hidden>
-            <button class="sm-item sm-default" id="stopAfterItem" onclick="chooseStop('stop-after')"><span class="sm-t">Stop after current task</span><span class="sm-h">lets it finish &amp; bank, then halts</span></button>
+            <button class="sm-item sm-default" id="stopAfterItem" onclick="chooseStop('stop-after')"><span class="sm-t">Stop after this cycle</span><span class="sm-h">worker finishes, quality checks run, work is banked, then it halts</span></button>
             <button class="sm-item sm-danger" id="stopBtn" onclick="chooseStop('stop')"><span class="sm-t">Stop now</span><span class="sm-h">discards the current task's progress (set aside, recoverable)</span></button>
           </div>
         </div>
@@ -301,7 +301,7 @@
       <hr style="border:0;border-top:1px solid var(--line);margin:12px 0">
       <div class="muted" style="margin-bottom:6px">Decided to stop it?</div>
       <div class="btns" style="grid-template-columns:1fr 1fr">
-        <button class="b-stop" onclick="setControl('stop-after')">Stop after task</button>
+        <button class="b-stop" onclick="setControl('stop-after')">Stop after cycle</button>
         <button class="b-stop" onclick="setControl('stop')">Stop now</button>
       </div>
     </div>
@@ -842,7 +842,7 @@ async function setControl(cmd){
   const id = selInst();
   if (!id){ log("pick an instance first", true); return; }
   if (cmd==="stop" && !confirm("Stop NOW ('"+id+"')? The current worker is stopped immediately; its unfinished work is SET ASIDE (recoverable, not committed) and the run halts. To let the task finish first, use 'Stop after current task'.")) return;
-  if (cmd==="stop-after" && !confirm("Stop after the current task ('"+id+"')? The run lets the task in hand FINISH (up to its time cap), banks it, then halts — nothing in progress is discarded.")) return;
+  if (cmd==="stop-after" && !confirm("Stop after this CYCLE ('"+id+"')? The worker in hand finishes (up to its time cap), the quality checks then run and bank its work, and only then does it halt — nothing in progress is discarded. This is the whole cycle, not just the current step.")) return;
   try{
     await pipeline(
       "INSERT INTO foreman_control(id,command,requested_at,requested_by,ack_at) "+

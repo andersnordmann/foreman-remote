@@ -30,7 +30,7 @@
   button:disabled { opacity:.45; cursor:default; transform:none; }   /* state-aware: the INERT button dims but KEEPS its colour (green=Enable-family, red=Disable-family). The bright button is always the live action; labels flip Enable<->Enabled / Disable<->Disabled to reinforce it. */
   .b-pause{ background:var(--warn); } .b-resume{ background:var(--ok); } .b-stop{ background:var(--bad); }
   /* Stop = ONE split control living in the 3rd cell of the button row. Main tap = the default
-     (stop after current task); the caret opens a dropdown that also holds the destructive "Stop now". */
+     (stop after this cycle); the caret opens a dropdown that also holds the destructive "Stop now". */
   .stopwrap { position:relative; }
   .stopsplit { display:flex; height:100%; }
   .b-stop-main { flex:1 1 auto; background:var(--bad); border-radius:10px 0 0 10px; padding:7px 4px;
@@ -467,7 +467,7 @@ function setControlBtns(state){
   if (P){ P.textContent = pend==="pause"  ? "Pausing…"  : "Pause";  P.disabled = !(alive && !paused) || pend==="pause"; }
   if (R){ R.textContent = pend==="resume" ? "Resuming…" : "Resume"; R.disabled = !paused             || pend==="resume"; }
   const stopping = pend==="stop" || pend==="stop-after";
-  // one split control: the MAIN button shows "Stop / after task" (the default value) or the in-flight state;
+  // one split control: the MAIN button shows "Stop / after cycle" (the default value) or the in-flight state;
   // the caret + tray item just disable. Target the title/subtitle spans so we don't wipe the 2-line face.
   const ST=$("stopMainT"), SUB=$("stopMainSub");
   if (ST) ST.textContent = stopping ? "Stopping…" : "Stop";
@@ -841,7 +841,7 @@ async function itemCmd(item, action){
 async function setControl(cmd){
   const id = selInst();
   if (!id){ log("pick an instance first", true); return; }
-  if (cmd==="stop" && !confirm("Stop NOW ('"+id+"')? The current worker is stopped immediately; its unfinished work is SET ASIDE (recoverable, not committed) and the run halts. To let the task finish first, use 'Stop after current task'.")) return;
+  if (cmd==="stop" && !confirm("Stop NOW ('"+id+"')? Whatever is running stops at once. A worker is stopped and its unfinished work SET ASIDE (recoverable, not committed); quality checks already running are ABORTED mid-way — nothing is committed and nothing is reverted, and they re-run from the start next time. To let the work in hand finish and be banked instead, use 'Stop after this cycle'.")) return;
   if (cmd==="stop-after" && !confirm("Stop after this CYCLE ('"+id+"')? The worker in hand finishes (up to its time cap), the quality checks then run and bank its work, and only then does it halt — nothing in progress is discarded. This is the whole cycle, not just the current step.")) return;
   try{
     await pipeline(

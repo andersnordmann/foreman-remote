@@ -609,7 +609,11 @@ function renderProgress(payload){
   subs.forEach(x => { const k = x.parent || "_"; (subsOf[k] = subsOf[k] || []).push(x); });
   const subRow = x => {
     const kn = (x.pct != null), w = kn ? Math.max(2, Math.round(x.pct)) : 0;
-    const nm = x.met ? '<i class="tk">✓</i> met'
+    // A met sub-check showed only "met" - no drive-down at all, so you could not see what it achieved.
+    // Goals have carried origin -> now since the start; the sub-rows simply never got it.
+    const nm = x.met ? ('<i class="tk">✓</i> met'
+                        + (x.origin != null ? '  ·  ' + esc(x.origin) + ' <i class="ar">→</i> '
+                                              + esc(x.now) : ''))
              : kn ? (esc(x.origin) + ' <i class="ar">→</i> ' + esc(x.now) + '  ·  '
                      + esc(Math.round(x.pct)) + '%')
                   : (esc(x.now) + ' → ' + esc(x.target));

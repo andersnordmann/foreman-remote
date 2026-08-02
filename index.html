@@ -54,6 +54,15 @@
   /* No recorded start => NO fill. A hatched track says "cannot be measured" instead of implying zero. */
   .pg-track.unknown { background:repeating-linear-gradient(45deg, var(--line) 0 6px, #1d232c 6px 12px); }
   .pg-note { font-size:11px; color:var(--mut); }
+  /* A sub-check belongs TO a goal. Shown flat at the bottom it loses the one relationship that makes it
+     meaningful, and open/complete were treated asymmetrically (open always on, complete behind a toggle).
+     Nested, with one control per goal, both states get the same treatment. */
+  .pg-sub { margin:2px 0 0 14px; padding-left:10px; border-left:2px solid var(--line); }
+  .pg-subtog { background:none; border:0; color:var(--mut); font-size:11px; padding:3px 0 0 14px;
+               cursor:pointer; text-align:left; }
+  .pg-subtog:hover { color:var(--fg); }
+  .pg-sub .pg-lab { font-size:11.5px; color:var(--mut); }
+  .pg-sub .pg-track { height:5px; }
   .pg-toggle { margin-top:12px; background:none; border:1px solid var(--line); color:var(--mut);
                border-radius:99px; padding:5px 12px; font-size:12px; cursor:pointer; }
   .pg-toggle:hover { color:var(--fg); border-color:var(--mut); }
@@ -553,7 +562,9 @@ function setControlBtns(state){
 //     bar that reads as "no progress";
 //   * met goals are collapsed and GROUPED - 38 rows, many sharing a phrase, is noise, not information.
 let metGoalsOpen = false;
+const subsOpenFor = {};   // goal name -> is its sub-check list expanded
 function toggleMetGoals(){ metGoalsOpen = !metGoalsOpen; renderProgress(lastProgress); }
+function toggleSubs(name){ subsOpenFor[name] = !subsOpenFor[name]; renderProgress(lastProgress); }
 let lastProgress = null;
 
 function renderProgress(payload){
@@ -594,6 +605,21 @@ function renderProgress(payload){
   // behind a toggle alongside 36 sub-checks made them unfindable - "where are the two completed goals?"
   // Open first (nearest-to-done leading), then the met ones as completed bars.
   open.sort((a,b) => (b.pct == null ? -1 : b.pct) - (a.pct == null ? -1 : a.pct));
+  const subsOf = {};
+  subs.forEach(x => { const k = x.parent || "_"; (subsOf[k] = subsOf[k] || []).push(x); });
+  const subRow = x => {
+    const kn = (x.pct != null), w = kn ? Math.max(2, Math.round(x.pct)) : 0;
+    const nm = x.met ? '<i class="tk">✓</i> met'
+             : kn ? (esc(x.origin) + ' <i class="ar">→</i> ' + esc(x.now) + '  ·  '
+                     + esc(Math.round(x.pct)) + '%')
+                  : (esc(x.now) + ' → ' + esc(x.target));
+    return '<div class="pg-row pg-sub">'
+      + '<div class="pg-top"><span class="pg-lab">' + esc(x.label || x.name) + '</span>'
+      + '<span class="pg-num"' + (x.met ? ' style="color:var(--ok)"' : '') + '>' + nm + '</span></div>'
+      + '<div class="pg-track' + (kn ? '' : ' unknown') + '">'
+      + (kn ? '<div class="pg-fill' + (x.met ? ' done' : '') + '" style="width:' + w + '%"></div>' : '')
+      + '</div></div>';
+  };
   $("pgList").innerHTML = open.concat(met).map(g => {
     const known = (g.pct != null);
     const w = known ? Math.max(2, Math.round(g.pct)) : 0;   // >=2% so a real bar is never invisible
@@ -612,49 +638,26 @@ function renderProgress(payload){
       + (known ? '<div class="pg-fill' + (g.met ? ' done' : '') + '" style="width:' + w + '%"></div>' : '')
       + '</div>'
       + (known ? '' : '<div class="pg-note">no starting value on record — showing a percentage would mean inventing one</div>')
+      + (() => {
+          const mine = subsOf[g.name] || [];
+          if (!mine.length) return '';
+          const live = mine.filter(x => !x.met).length;
+          const openNow = !!subsOpenFor[g.name];
+          // The count and the IN-PROGRESS share are on the collapsed control, so the live work is legible
+          // without expanding anything - that was the point of surfacing sub-checks at all.
+          return '<button class="pg-subtog" onclick="toggleSubs(' + JSON.stringify(g.name) + ')">'
+            + (openNow ? '▾' : '▸') + '  ' + mine.length + ' sub-check'
+            + (mine.length === 1 ? '' : 's') + (live ? '  ·  ' + live + ' in progress' : '  ·  all complete')
+            + '</button>'
+            + (openNow ? mine.slice().sort((a, b) => (a.met ? 1 : 0) - (b.met ? 1 : 0)).map(subRow).join("") : '');
+        })()
       + '</div>';
   }).join("");
 
-  // An OPEN sub-check was invisible: not a curated goal, so absent from the list, and the toggle only ever
-  // held MET ones. The four slices actively working the headline goal appeared NOWHERE, while the summary
-  // said "36 of 36 complete". A progress display that hides the work in flight is worse than none.
-  if (subOpen.length){
-    $("pgList").innerHTML += '<div class="pg-note" style="margin-top:4px">in progress — sub-checks '
-      + 'currently being worked, each a slice of a goal above:</div>'
-      + subOpen.map(g => {
-          const known = (g.pct != null);
-          const w = known ? Math.max(2, Math.round(g.pct)) : 0;
-          const num = known ? (esc(g.origin) + ' <i class="ar">→</i> ' + esc(g.now) + '  ·  '
-                               + esc(Math.round(g.pct)) + '%')
-                            : (esc(g.now) + ' → target ' + esc(g.target));
-          return '<div class="pg-row" style="opacity:.85">'
-            + '<div class="pg-top"><span class="pg-lab">' + esc(g.label || g.name) + '</span>'
-            + '<span class="pg-num">' + num + '</span></div>'
-            + '<div class="pg-track' + (known ? '' : ' unknown') + '">'
-            + (known ? '<div class="pg-fill" style="width:' + w + '%"></div>' : '')
-            + '</div></div>';
-        }).join("");
-  }
-
-  const tog = $("pgToggle"), list = $("pgMetList");
-  const closedSubs = subs.filter(g => g.met);
-  if (!closedSubs.length){ tog.hidden = true; list.hidden = true; return; }
-  tog.hidden = false;
-  tog.textContent = (metGoalsOpen ? "▾  hide " : "▸  show ") + closedSubs.length +
-                    " completed sub-check" + (closedSubs.length === 1 ? "" : "s");
-  list.hidden = !metGoalsOpen;
-  if (metGoalsOpen){
-    // Grouped by phrase because 36 share one, but each chip names its COUNT and the goals are listed
-    // FIRST and separately - collapsing 38 into 3 unlabelled chips read as "data missing", which is how
-    // this was spotted.
-    const chip = (k, n, isGoal) => '<span class="pg-chip"><b>✓</b> ' + esc(k) +
-      (n > 1 ? " ×" + n : "") + (isGoal ? "" : "") + '</span>';
-    const byS = {};
-    closedSubs.forEach(g => { const k = g.label || g.name; byS[k] = (byS[k] || 0) + 1; });
-    list.innerHTML = '<div class="pg-note" style="width:100%">activation proofs for the goals above - they '
-      + 'share a description because they each slice one goal:</div>'
-      + Object.keys(byS).sort().map(k => chip(k, byS[k], false)).join("");
-  }
+  // Sub-checks are nested under their goal now, so the bottom expander has nothing left to hold. Kept
+  // hidden rather than removed from the markup so an older cached page cannot show an orphaned control.
+  $("pgToggle").hidden = true;
+  $("pgMetList").hidden = true;
 }
 
 function renderSelected(){

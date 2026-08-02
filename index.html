@@ -32,9 +32,14 @@
      tight line-heights plus a hair of optical offset put the percentage on the visual centre line. */
   .pg-ring b { font-size:19px; font-weight:700; line-height:1; margin-top:1px; }
   .pg-ring s { font-size:10px; color:var(--mut); text-decoration:none; line-height:1; margin-top:3px; }
-  /* The arrow comes from a FALLBACK font whose baseline sits below the digits around it, so it reads as
-     dropped. Nudge just the glyph rather than the whole line. */
-  .pg-num .ar { font-style:normal; position:relative; top:-1px; padding:0 1px; }
+  /* WHY ALIGNMENT, NOT AN OFFSET. First attempt nudged every arrow up 1px, which broke the four rows that
+     were already correct (akn, comparing screenshots: "the arrows on the open goals were centered
+     perfectly... now all arrows are a tad too high"). The arrow was never the problem - the MET rows carry
+     a tick from a different fallback font, and its metrics shift that line. So instead of compensating with
+     a magic offset, the number column becomes an inline-flex row and centres its parts: every glyph group
+     is aligned as a box, whatever font each one resolves to. */
+  .pg-num { display:inline-flex; align-items:center; white-space:nowrap; }
+  .pg-num .ar, .pg-num .tk { font-style:normal; line-height:1; padding:0 3px; }
   .pg-sum { font-size:13px; color:var(--mut); }
   .pg-sum em { color:var(--fg); font-style:normal; font-weight:600; }
   .pg-list { margin-top:12px; display:flex; flex-direction:column; gap:11px; }
@@ -589,8 +594,9 @@ function renderProgress(payload){
     // The number column now carries MARKUP (the nudged arrow), so it is built from escaped parts rather
     // than escaped wholesale. Every interpolated value goes through esc() - they are validated integers
     // today, and that is precisely the assumption that rots.
-    const AR = '<i class="ar">→</i>';   // nudged glyph, see .pg-num .ar
-    const num = g.met ? ("✓ met  ·  " + esc(g.origin) + " " + AR + " " + esc(g.now))
+    const AR = '<i class="ar">→</i>';        // its own flex item, centred - see .pg-num
+    const TK = '<i class="tk">✓</i>';        // the tick resolves to a different font; same treatment
+    const num = g.met ? (TK + " met  ·  " + esc(g.origin) + " " + AR + " " + esc(g.now))
               : known ? (esc(g.origin) + " " + AR + " " + esc(g.now) + "  ·  " + esc(Math.round(g.pct)) + "%")
                       : (esc(g.now) + " to go");
     return '<div class="pg-row">'

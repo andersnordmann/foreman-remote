@@ -303,7 +303,7 @@
     </div>
     <div class="card" id="progCard" hidden>
       <div class="pg-head">
-        <div class="pg-ring" id="pgRing" style="--pct:0"><i><b id="pgMet">0</b><s id="pgOf">of 0</s></i></div>
+        <div class="pg-ring" id="pgRing" style="--pct:0"><i><b id="pgMet">0%</b><s id="pgOf">0 of 0</s></i></div>
         <div class="pg-sum" id="pgSum">&mdash;</div>
       </div>
       <div class="pg-list" id="pgList"></div>
@@ -562,8 +562,10 @@ function renderProgress(payload){
   const met = real.filter(g => g.met), open = real.filter(g => !g.met);
   const pct = real.length ? Math.round(100 * met.length / real.length) : 0;
   $("pgRing").style.setProperty("--pct", pct);
-  $("pgMet").textContent = met.length;
-  $("pgOf").textContent = "of " + real.length;
+  // The NUMBER, not just the sweep - a percentage the eye has to estimate from an arc is not a figure you
+  // can quote back, and the count belongs beside it.
+  $("pgMet").textContent = pct + "%";
+  $("pgOf").textContent = met.length + " of " + real.length;
   const subMet = subs.filter(g => g.met).length;
   $("pgSum").innerHTML = (open.length
       ? "<em>" + open.length + "</em> goal" + (open.length === 1 ? "" : "s") + " still open"
@@ -571,29 +573,32 @@ function renderProgress(payload){
     + (subs.length ? "<br><span style='font-size:11.5px'>plus " + subMet + " of " + subs.length
        + " completed sub-checks — activation proofs for these goals, not goals themselves</span>" : "");
 
-  // open goals, nearest-to-done first, so the ones about to close are visible
+  // EVERY real goal is listed, met ones included. There are only a handful, and burying the finished ones
+  // behind a toggle alongside 36 sub-checks made them unfindable - "where are the two completed goals?"
+  // Open first (nearest-to-done leading), then the met ones as completed bars.
   open.sort((a,b) => (b.pct == null ? -1 : b.pct) - (a.pct == null ? -1 : a.pct));
-  $("pgList").innerHTML = open.map(g => {
+  $("pgList").innerHTML = open.concat(met).map(g => {
     const known = (g.pct != null);
     const w = known ? Math.max(2, Math.round(g.pct)) : 0;   // >=2% so a real bar is never invisible
-    const num = known ? (g.origin + " → " + g.now + "  ·  " + Math.round(g.pct) + "%")
+    const num = g.met ? ("✓ met  ·  " + g.origin + " → " + g.now)
+              : known ? (g.origin + " → " + g.now + "  ·  " + Math.round(g.pct) + "%")
                       : (g.now + " to go");
     return '<div class="pg-row">'
       + '<div class="pg-top"><span class="pg-lab">' + esc(g.label || g.name) + '</span>'
-      + '<span class="pg-num">' + esc(num) + '</span></div>'
+      + '<span class="pg-num"' + (g.met ? ' style="color:var(--ok)"' : '') + '>' + esc(num) + '</span></div>'
       + '<div class="pg-track' + (known ? '' : ' unknown') + '">'
-      + (known ? '<div class="pg-fill" style="width:' + w + '%"></div>' : '')
+      + (known ? '<div class="pg-fill' + (g.met ? ' done' : '') + '" style="width:' + w + '%"></div>' : '')
       + '</div>'
       + (known ? '' : '<div class="pg-note">no starting value on record — showing a percentage would mean inventing one</div>')
       + '</div>';
   }).join("");
 
   const tog = $("pgToggle"), list = $("pgMetList");
-  const closed = met.concat(subs.filter(g => g.met));
-  if (!closed.length){ tog.hidden = true; list.hidden = true; return; }
+  const closedSubs = subs.filter(g => g.met);
+  if (!closedSubs.length){ tog.hidden = true; list.hidden = true; return; }
   tog.hidden = false;
-  tog.textContent = (metGoalsOpen ? "▾  hide " : "▸  show ") + closed.length +
-                    " completed check" + (closed.length === 1 ? "" : "s");
+  tog.textContent = (metGoalsOpen ? "▾  hide " : "▸  show ") + closedSubs.length +
+                    " completed sub-check" + (closedSubs.length === 1 ? "" : "s");
   list.hidden = !metGoalsOpen;
   if (metGoalsOpen){
     // Grouped by phrase because 36 share one, but each chip names its COUNT and the goals are listed
@@ -601,16 +606,11 @@ function renderProgress(payload){
     // this was spotted.
     const chip = (k, n, isGoal) => '<span class="pg-chip"><b>✓</b> ' + esc(k) +
       (n > 1 ? " ×" + n : "") + (isGoal ? "" : "") + '</span>';
-    const byG = {}, byS = {};
-    met.forEach(g => { const k = g.label || g.name; byG[k] = (byG[k] || 0) + 1; });
-    subs.filter(g => g.met).forEach(g => { const k = g.label || g.name; byS[k] = (byS[k] || 0) + 1; });
-    let html = Object.keys(byG).sort().map(k => chip(k, byG[k], true)).join("");
-    if (Object.keys(byS).length){
-      html += '<div class="pg-note" style="width:100%;margin-top:6px">sub-checks (activation proofs, '
-            + 'grouped - they share a description because they slice one goal):</div>'
-            + Object.keys(byS).sort().map(k => chip(k, byS[k], false)).join("");
-    }
-    list.innerHTML = html;
+    const byS = {};
+    closedSubs.forEach(g => { const k = g.label || g.name; byS[k] = (byS[k] || 0) + 1; });
+    list.innerHTML = '<div class="pg-note" style="width:100%">activation proofs for the goals above - they '
+      + 'share a description because they each slice one goal:</div>'
+      + Object.keys(byS).sort().map(k => chip(k, byS[k], false)).join("");
   }
 }
 

@@ -615,7 +615,7 @@ function renderProgress(payload){
   // Open first (nearest-to-done leading), then the met ones as completed bars.
   // ACTIVE FIRST, then nearest-to-done. The question 'which one is being worked on right now'
   // should not require scanning the list.
-  open.sort((a,b) => (b.active ? 1 : 0) - (a.active ? 1 : 0)
+  open.sort((a,b) => ((b.active && !b.met) ? 1 : 0) - ((a.active && !a.met) ? 1 : 0)
                   || (b.pct == null ? -1 : b.pct) - (a.pct == null ? -1 : a.pct));
   const subsOf = {};
   subs.forEach(x => { const k = x.parent || "_"; (subsOf[k] = subsOf[k] || []).push(x); });
@@ -659,7 +659,7 @@ function renderProgress(payload){
     const num = g.met ? (TK + " met  ·  " + esc(g.origin) + " " + AR + " " + esc(g.now))
               : known ? (esc(g.origin) + " " + AR + " " + esc(g.now) + "  ·  " + esc(Math.round(g.pct)) + "%")
                       : (esc(g.now) + " to go");
-    return '<div class="pg-row' + (g.active ? ' act' : '') + '">'
+    return '<div class="pg-row' + ((g.active && !g.met) ? ' act' : '') + '">'
       + '<div class="pg-top"><span class="pg-lab">' + esc(g.label || g.name) + '</span>'
       + '<span class="pg-num"' + (g.met ? ' style="color:var(--ok)"' : '') + '>' + num + '</span></div>'
       // ITS OWN LINE, not inside .pg-lab. akn's screenshot showed the accent bar with NO text beside it:
@@ -667,10 +667,18 @@ function renderProgress(payload){
       // it is CLIPPED by the very label it sits after - on a phone, with these label lengths, always. The
       // result was an unexplained blue bar next to a green "met" goal, which is worse than no marker.
       // A MET goal can still be the live item: metric at target, item held open by tracked debt.
-      + (g.active ? '<div class="pg-now"><span class="dot"></span>'
-                    + (g.met ? 'reached - still finishing related work on this task'
-                             : 'being worked on now')
-                    + '</div>' : '')
+      // NEVER on a MET goal. akn: "how can a goal both be reached and still be worked on at the same time?
+      // this seems like a contradiction of terms." It is one, and the previous wording only dressed it up.
+      // The goal is done; a TASK filed under it is still running, doing work owed to OTHER goals - so the
+      // goal is not marked at all. The task is still named on the status line and in the to-do list.
+      // Guarded HERE as well as at the source, because the payload is data from another process and a
+      // display should not restate a contradiction just because it was handed one.
+      // AT TARGET is not SIGNED OFF. The engine will not call a goal done while deferred work remains on
+      // the reports involved; the card counted it as met anyway and overstated the score. Shown as its own
+      // state rather than quietly dropped from the met count, or it just looks stuck at 100%.
+      + (g.awaiting_debt
+           ? '<div class="pg-now" style="color:var(--warn,#d29922)"><span class="dot" style="background:var(--warn,#d29922)"></span>reached its number - not signed off while deferred work remains</div>'
+           : ((g.active && !g.met) ? '<div class="pg-now"><span class="dot"></span>being worked on now</div>' : ''))
       + '<div class="pg-track' + (known ? '' : ' unknown') + '">'
       + (known ? '<div class="pg-fill' + (g.met ? ' done' : '') + '" style="width:' + w + '%"></div>' : '')
       + '</div>'

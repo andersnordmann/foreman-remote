@@ -598,8 +598,8 @@ function renderProgress(payload){
     // noun arrives.
     + (subs.length ? "<br><span style='font-size:11.5px'>" + subMet + " of " + subs.length
        + " sub-checks complete — activation proofs for these goals, not goals themselves</span>" : "")
-    + (subOpen.length ? "<br><span style='font-size:11.5px;color:var(--accent)'>" + subOpen.length
-       + " sub-check" + (subOpen.length === 1 ? " is" : "s are") + " in progress</span>" : "");
+    ;   // the in-progress count lives on each goal's own control now - repeating it here said the same
+        // thing twice and detached it from the goal it applies to.
 
   // EVERY real goal is listed, met ones included. There are only a handful, and burying the finished ones
   // behind a toggle alongside 36 sub-checks made them unfindable - "where are the two completed goals?"
@@ -645,7 +645,10 @@ function renderProgress(payload){
           const openNow = !!subsOpenFor[g.name];
           // The count and the IN-PROGRESS share are on the collapsed control, so the live work is legible
           // without expanding anything - that was the point of surfacing sub-checks at all.
-          return '<button class="pg-subtog" onclick="toggleSubs(' + JSON.stringify(g.name) + ')">'
+          // SINGLE quotes inside the double-quoted attribute. JSON.stringify emits DOUBLE quotes, which
+          // closed the attribute early and left the button inert - and the suite never caught it because it
+          // set the state directly instead of going through the rendered markup.
+          return '<button class="pg-subtog" onclick="toggleSubs(&quot;' + esc(g.name) + '&quot;)">'
             + (openNow ? '▾' : '▸') + '  ' + mine.length + ' sub-check'
             + (mine.length === 1 ? '' : 's') + (live ? '  ·  ' + live + ' in progress' : '  ·  all complete')
             + '</button>'

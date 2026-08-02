@@ -25,10 +25,16 @@
   .pg-head { display:flex; align-items:center; gap:14px; }
   .pg-ring { width:76px; height:76px; border-radius:50%; flex:0 0 auto; display:grid; place-items:center;
              background:conic-gradient(var(--ok) calc(var(--pct) * 1%), var(--line) 0); }
-  .pg-ring i { width:60px; height:60px; border-radius:50%; background:var(--card); display:grid;
-               place-items:center; font-style:normal; line-height:1.05; text-align:center; }
-  .pg-ring b { font-size:19px; font-weight:700; display:block; }
-  .pg-ring s { font-size:10px; color:var(--mut); text-decoration:none; display:block; }
+  .pg-ring i { width:60px; height:60px; border-radius:50%; background:var(--card); display:flex;
+               flex-direction:column; align-items:center; justify-content:center; font-style:normal;
+               text-align:center; line-height:1; }
+  /* The two lines are different sizes, so centring the BLOCK leaves the big number reading high. Explicit
+     tight line-heights plus a hair of optical offset put the percentage on the visual centre line. */
+  .pg-ring b { font-size:19px; font-weight:700; line-height:1; margin-top:1px; }
+  .pg-ring s { font-size:10px; color:var(--mut); text-decoration:none; line-height:1; margin-top:3px; }
+  /* The arrow comes from a FALLBACK font whose baseline sits below the digits around it, so it reads as
+     dropped. Nudge just the glyph rather than the whole line. */
+  .pg-num .ar { font-style:normal; position:relative; top:-1px; padding:0 1px; }
   .pg-sum { font-size:13px; color:var(--mut); }
   .pg-sum em { color:var(--fg); font-style:normal; font-weight:600; }
   .pg-list { margin-top:12px; display:flex; flex-direction:column; gap:11px; }
@@ -580,12 +586,16 @@ function renderProgress(payload){
   $("pgList").innerHTML = open.concat(met).map(g => {
     const known = (g.pct != null);
     const w = known ? Math.max(2, Math.round(g.pct)) : 0;   // >=2% so a real bar is never invisible
-    const num = g.met ? ("✓ met  ·  " + g.origin + " → " + g.now)
-              : known ? (g.origin + " → " + g.now + "  ·  " + Math.round(g.pct) + "%")
-                      : (g.now + " to go");
+    // The number column now carries MARKUP (the nudged arrow), so it is built from escaped parts rather
+    // than escaped wholesale. Every interpolated value goes through esc() - they are validated integers
+    // today, and that is precisely the assumption that rots.
+    const AR = '<i class="ar">→</i>';   // nudged glyph, see .pg-num .ar
+    const num = g.met ? ("✓ met  ·  " + esc(g.origin) + " " + AR + " " + esc(g.now))
+              : known ? (esc(g.origin) + " " + AR + " " + esc(g.now) + "  ·  " + esc(Math.round(g.pct)) + "%")
+                      : (esc(g.now) + " to go");
     return '<div class="pg-row">'
       + '<div class="pg-top"><span class="pg-lab">' + esc(g.label || g.name) + '</span>'
-      + '<span class="pg-num"' + (g.met ? ' style="color:var(--ok)"' : '') + '>' + esc(num) + '</span></div>'
+      + '<span class="pg-num"' + (g.met ? ' style="color:var(--ok)"' : '') + '>' + num + '</span></div>'
       + '<div class="pg-track' + (known ? '' : ' unknown') + '">'
       + (known ? '<div class="pg-fill' + (g.met ? ' done' : '') + '" style="width:' + w + '%"></div>' : '')
       + '</div>'

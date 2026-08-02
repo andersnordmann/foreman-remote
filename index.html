@@ -51,6 +51,7 @@
   /* a BLOCK on its own line - inside .pg-lab it was clipped by that span's ellipsis and never appeared */
   .pg-now { color:var(--accent); font-size:10.5px; font-weight:600; letter-spacing:.02em;
             margin:1px 0 2px 0; }
+  .pg-tasks { color:var(--mut); font-size:10.5px; margin:1px 0 2px 0; }
   .pg-now .dot { display:inline-block; width:6px; height:6px; border-radius:50%;
                  background:var(--accent); margin-right:5px; vertical-align:middle; }
   .pg-top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:12.5px; }
@@ -677,8 +678,19 @@ function renderProgress(payload){
       // the reports involved; the card counted it as met anyway and overstated the score. Shown as its own
       // state rather than quietly dropped from the met count, or it just looks stuck at 100%.
       + (g.awaiting_debt
-           ? '<div class="pg-now" style="color:var(--warn,#d29922)"><span class="dot" style="background:var(--warn,#d29922)"></span>reached its number - not signed off while deferred work remains</div>'
+           ? '<div class="pg-now" style="color:var(--warn,#d29922)"><span class="dot" style="background:var(--warn,#d29922)"></span>reached its number - waiting on '
+             + (g.tasks && g.tasks.length ? esc(g.tasks.join(', ')) : 'deferred work')
+             + (g.open_debt ? ' (' + esc(g.open_debt) + ' deferred items still to clear)' : '')
+             + '</div>'
            : ((g.active && !g.met) ? '<div class="pg-now"><span class="dot"></span>being worked on now</div>' : ''))
+      // WHICH TASKS STAND BETWEEN THIS GOAL AND DONE. akn: "how does the user know that it's L1finish2
+      // that needs to be closed before the goal is done?" Nothing said so - the goals card and the to-do
+      // list named different things and never referred to each other. Named here, on the goal itself.
+      + ((!g.met && g.tasks && g.tasks.length)
+           ? (g.awaiting_debt ? '' : '<div class="pg-tasks">' + esc(g.tasks.length) + ' task'
+             + (g.tasks.length === 1 ? '' : 's') + ' to close: ' + esc(g.tasks.slice(0, 4).join(', '))
+             + (g.tasks.length > 4 ? ' +' + esc(g.tasks.length - 4) + ' more' : '') + '</div>')
+           : '')
       + '<div class="pg-track' + (known ? '' : ' unknown') + '">'
       + (known ? '<div class="pg-fill' + (g.met ? ' done' : '') + '" style="width:' + w + '%"></div>' : '')
       + '</div>'

@@ -509,7 +509,24 @@ const COLORS = { running:"var(--ok)","idle":"var(--accent)", done:"var(--accent)
   "relay-degraded":"var(--warn)", "stopped-remote":"var(--bad)",
   stopped:"var(--bad)", crashed:"var(--bad)", error:"var(--bad)" };
 
-let lastStatus = [], lastControl = [], lastQueue = [];   // cached rows, so an instance switch re-renders without a round-trip
+let lastStatus = [], lastControl = [], lastQueue = [];
+// ONE TASK, ONE NAME. Every item carries an internal id (L2bb) and a ledger ref (#2bb). The phase text,
+// the story and the goals card all print the ref; the hero line and the to-do rows printed the id, so the
+// same task appeared under two names on one screen (akn: "it's L2bb in the status and to-do list, and 2bb
+// the goals and story"). The mirrored queue already carries both, so the phone can resolve it itself - no
+// engine change, and last_item stays the raw id because the to-do highlight matches on it.
+function itemRef(id){
+  if (!id) return id;
+  const inst = selInst();
+  for (const r of lastQueue){
+    if (r.id !== inst) continue;
+    let its = [];
+    try { its = JSON.parse(r.items || "[]"); } catch(e) { its = []; }
+    const hit = its.find(x => String(x.id) === String(id));
+    if (hit && hit.ledger) return String(hit.ledger);
+  }
+  return id;
+}   // cached rows, so an instance switch re-renders without a round-trip
 let pending = null;          // {inst,cmd,since}: a tapped control not yet reflected in state -> in-flight button label
 let deferredPrompt = null;   // captured beforeinstallprompt event, so the Install button can trigger the OS prompt
 let _refreshFails = 0;   // consecutive refresh failures — log only the first of a streak (don't spam transient blips)
@@ -734,12 +751,12 @@ function renderSelected(){
     $("state").textContent = s.state || "—";
     $("dot").style.background = $("state").style.color = COLORS[s.state] || "var(--mut)";
     $("batch").textContent = s.batch ?? "—";
-    $("item").textContent = s.last_item || "—";
+    $("item").textContent = itemRef(s.last_item) || "—";
     // DE-DUPLICATE the hero: the phone's `last_result` sentence normally already NAMES the item
     // ("working on <id> - N actions, last activity just now"), so restating it underneath read as the
     // same fact twice. Show the item line only when the phase text does NOT already contain it. The
     // element stays in the DOM either way, so nothing else that writes #item has to care.
-    const _hIt  = String(s.last_item || "").trim();
+    const _hIt  = itemRef(String(s.last_item || "").trim());
     const _hAct = String(s.last_result || "");
     const _hDup = !!_hIt && _hAct.includes(_hIt);
     $("heroOn").textContent = (_hIt && !_hDup) ? "working on" : "";
@@ -913,7 +930,7 @@ function renderQueue(){
     html += `<div class="qitem${rowcls}"${indent}><div class="qhead">`+
       tri+
       `<span class="qst ${working?'s-running':'s-'+esc(i.status)}">${working?'▶ working':esc(i.status)}</span>`+
-      `<b>${esc(i.id)}</b>${hid}${prog}<span class="muted">${esc(i.ledger||"")}</span>${btn}</div>`+
+      `<b>${esc(i.ledger||i.id)}</b>${hid}${prog}<span class="muted">${esc(i.ledger?i.id:"")}</span>${btn}</div>`+
       (qShowDesc && i.title ? `<div class="qtitle" title="${esc(i.title)}">${esc(i.title)}</div>` : "")+
       `</div>`;
     if (collapsed) skipBelow = depth;

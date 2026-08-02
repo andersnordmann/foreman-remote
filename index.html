@@ -47,6 +47,11 @@
                border-radius:99px; padding:5px 12px; font-size:12px; cursor:pointer; }
   .pg-toggle:hover { color:var(--fg); border-color:var(--mut); }
   .pg-met { margin-top:10px; display:flex; flex-wrap:wrap; gap:6px; }
+  /* An author `display` rule BEATS the hidden attribute (that is only display:none in the UA sheet), so a
+     flex container with content stays visible after .hidden = true. The page already carries this guard for
+     .stopmenu, .tabpane and .hero-sub - the same trap, hit a fourth time here: the met-goals list could be
+     shown but never hidden again. */
+  .pg-met[hidden], .pg-list[hidden], .pg-head[hidden] { display:none; }
   .pg-chip { font-size:11px; color:var(--mut); background:#12181f; border:1px solid var(--line);
              border-radius:99px; padding:3px 9px; }
   .pg-chip b { color:var(--ok); font-weight:600; }

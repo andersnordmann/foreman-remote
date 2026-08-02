@@ -17,6 +17,41 @@
   .brand h1 { margin:0; }
   .brand .logo { width:40px; height:40px; flex:0 0 auto; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin:0 0 12px; }
+  /* ---- PROGRESS: one bar per declared goal ------------------------------------------------------
+     Deliberately NOT one overall number - combining goals needs a weighting that changes the answer
+     wildly (by raw counts this project reads ~78% because one metric fell 353 points, while the goal
+     that gates the finish sits at 13%). The ring counts GOALS MET, which is weighting-free.
+     Self-contained: a conic-gradient ring and gradient-filled tracks, no library, CSP-safe. */
+  .pg-head { display:flex; align-items:center; gap:14px; }
+  .pg-ring { width:76px; height:76px; border-radius:50%; flex:0 0 auto; display:grid; place-items:center;
+             background:conic-gradient(var(--ok) calc(var(--pct) * 1%), var(--line) 0); }
+  .pg-ring i { width:60px; height:60px; border-radius:50%; background:var(--card); display:grid;
+               place-items:center; font-style:normal; line-height:1.05; text-align:center; }
+  .pg-ring b { font-size:19px; font-weight:700; display:block; }
+  .pg-ring s { font-size:10px; color:var(--mut); text-decoration:none; display:block; }
+  .pg-sum { font-size:13px; color:var(--mut); }
+  .pg-sum em { color:var(--fg); font-style:normal; font-weight:600; }
+  .pg-list { margin-top:12px; display:flex; flex-direction:column; gap:11px; }
+  .pg-row { display:flex; flex-direction:column; gap:5px; }
+  .pg-top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:12.5px; }
+  .pg-lab { color:var(--fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pg-num { color:var(--mut); font-variant-numeric:tabular-nums; flex:0 0 auto; font-size:11.5px; }
+  .pg-track { height:8px; border-radius:99px; background:var(--line); overflow:hidden; }
+  .pg-fill { height:100%; border-radius:99px; transition:width .5s ease;
+             background:linear-gradient(90deg, var(--accent), #6cb6ff); }
+  .pg-fill.done { background:linear-gradient(90deg, var(--ok), #57d478); }
+  /* No recorded start => NO fill. A hatched track says "cannot be measured" instead of implying zero. */
+  .pg-track.unknown { background:repeating-linear-gradient(45deg, var(--line) 0 6px, #1d232c 6px 12px); }
+  .pg-note { font-size:11px; color:var(--mut); }
+  .pg-toggle { margin-top:12px; background:none; border:1px solid var(--line); color:var(--mut);
+               border-radius:99px; padding:5px 12px; font-size:12px; cursor:pointer; }
+  .pg-toggle:hover { color:var(--fg); border-color:var(--mut); }
+  .pg-met { margin-top:10px; display:flex; flex-wrap:wrap; gap:6px; }
+  .pg-chip { font-size:11px; color:var(--mut); background:#12181f; border:1px solid var(--line);
+             border-radius:99px; padding:3px 9px; }
+  .pg-chip b { color:var(--ok); font-weight:600; }
+  @media (prefers-reduced-motion: reduce) { .pg-fill { transition:none; } }
+
   .row { display:flex; justify-content:space-between; gap:10px; padding:4px 0; }
   .row .k { color:var(--mut); } .row .v { font-weight:600; text-align:right; word-break:break-word; }
   .state { font-size:22px; font-weight:700; }
@@ -261,7 +296,17 @@
       </div>
       <button class="b-ghost full" onclick="refresh()">Refresh now</button>
     </div>
+    <div class="card" id="progCard" hidden>
+      <div class="pg-head">
+        <div class="pg-ring" id="pgRing" style="--pct:0"><i><b id="pgMet">0</b><s id="pgOf">of 0</s></i></div>
+        <div class="pg-sum" id="pgSum">&mdash;</div>
+      </div>
+      <div class="pg-list" id="pgList"></div>
+      <button class="pg-toggle" id="pgToggle" onclick="toggleMetGoals()" hidden></button>
+      <div class="pg-met" id="pgMetList" hidden></div>
+    </div>
   </div>
+
 
   <div class="tabpane" id="pane-queue" hidden>
     <div class="card">
@@ -483,6 +528,69 @@ function setControlBtns(state){
   if (S){ S.disabled = !alive || hardStop; }               // "Stop now" tray item: stays live during a pending graceful stop (escalation)
   if (hardStop) closeStopMenu();                           // only fold the tray once the immediate stop is in flight
 }
+// ---- PROGRESS: per-goal completion --------------------------------------------------------------
+// Fed by foreman_status.progress (JSON from src/progress.py, pushed by the supervisor because the phone
+// cannot run python). Three deliberate choices, each of which a naive version gets wrong:
+//   * the ring counts GOALS MET, not an averaged percentage - averaging needs a weighting, and by raw
+//     counts one large metric drowns the one that actually gates the finish;
+//   * a goal whose STARTING value was never recorded gets a hatched track and says so, rather than a 0%
+//     bar that reads as "no progress";
+//   * met goals are collapsed and GROUPED - 38 rows, many sharing a phrase, is noise, not information.
+let metGoalsOpen = false;
+function toggleMetGoals(){ metGoalsOpen = !metGoalsOpen; renderProgress(lastProgress); }
+let lastProgress = null;
+
+function renderProgress(payload){
+  lastProgress = payload;
+  const card = $("progCard"); if (!card) return;
+  let goals = null;
+  try { goals = payload ? (typeof payload === "string" ? JSON.parse(payload) : payload).goals : null; }
+  catch(e) { goals = null; }
+  if (!goals || !goals.length){ card.hidden = true; return; }
+  card.hidden = false;
+
+  const met = goals.filter(g => g.met), open = goals.filter(g => !g.met);
+  const pct = goals.length ? Math.round(100 * met.length / goals.length) : 0;
+  $("pgRing").style.setProperty("--pct", pct);
+  $("pgMet").textContent = met.length;
+  $("pgOf").textContent = "of " + goals.length;
+  $("pgSum").innerHTML = open.length
+    ? "<em>" + open.length + "</em> goal" + (open.length === 1 ? "" : "s") + " still open"
+    : "<em>every</em> declared goal is at target";
+
+  // open goals, nearest-to-done first, so the ones about to close are visible
+  open.sort((a,b) => (b.pct == null ? -1 : b.pct) - (a.pct == null ? -1 : a.pct));
+  $("pgList").innerHTML = open.map(g => {
+    const known = (g.pct != null);
+    const w = known ? Math.max(2, Math.round(g.pct)) : 0;   // >=2% so a real bar is never invisible
+    const num = known ? (g.origin + " → " + g.now + "  ·  " + Math.round(g.pct) + "%")
+                      : (g.now + " to go");
+    return '<div class="pg-row">'
+      + '<div class="pg-top"><span class="pg-lab">' + esc(g.label || g.name) + '</span>'
+      + '<span class="pg-num">' + esc(num) + '</span></div>'
+      + '<div class="pg-track' + (known ? '' : ' unknown') + '">'
+      + (known ? '<div class="pg-fill" style="width:' + w + '%"></div>' : '')
+      + '</div>'
+      + (known ? '' : '<div class="pg-note">no starting value on record — showing a percentage would mean inventing one</div>')
+      + '</div>';
+  }).join("");
+
+  const tog = $("pgToggle"), list = $("pgMetList");
+  if (!met.length){ tog.hidden = true; list.hidden = true; return; }
+  tog.hidden = false;
+  tog.textContent = (metGoalsOpen ? "▾  hide " : "▸  show ") + met.length + " goal" +
+                    (met.length === 1 ? "" : "s") + " already met";
+  list.hidden = !metGoalsOpen;
+  if (metGoalsOpen){
+    // GROUPED by plain phrase: many slice checks share one, and 38 near-identical rows is noise.
+    const by = {};
+    met.forEach(g => { const k = g.label || g.name; by[k] = (by[k] || 0) + 1; });
+    list.innerHTML = Object.keys(by).sort().map(k =>
+      '<span class="pg-chip"><b>✓</b> ' + esc(k) + (by[k] > 1 ? " ×" + by[k] : "") + '</span>'
+    ).join("");
+  }
+}
+
 function renderSelected(){
   const id = selInst();
   const s = lastStatus.find(r => r.id === id);
@@ -493,6 +601,7 @@ function renderSelected(){
   // can't do its job / a task is stuck and needs the user.
   const attnEl = $("attn");
   if (attnEl){ const at = (s && s.attention) ? String(s.attention) : ""; attnEl.hidden = !at; attnEl.textContent = at; }
+  renderProgress(s ? s.progress : null);
   if (s){
     $("state").textContent = s.state || "—";
     $("dot").style.background = $("state").style.color = COLORS[s.state] || "var(--mut)";

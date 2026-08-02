@@ -549,14 +549,22 @@ function renderProgress(payload){
   if (!goals || !goals.length){ card.hidden = true; return; }
   card.hidden = false;
 
-  const met = goals.filter(g => g.met), open = goals.filter(g => !g.met);
-  const pct = goals.length ? Math.round(100 * met.length / goals.length) : 0;
+  // REAL GOALS ONLY in the ring. 36 of 43 entries here are `dead_migctrl_*` activation proofs minted by
+  // task splits - sub-checks of ONE objective. Counting them made the ring read 88% while 2 of the 7 real
+  // goals were met, which is precisely the misleading single number this card exists to avoid.
+  const real = goals.filter(g => g.curated !== false);
+  const subs = goals.filter(g => g.curated === false);
+  const met = real.filter(g => g.met), open = real.filter(g => !g.met);
+  const pct = real.length ? Math.round(100 * met.length / real.length) : 0;
   $("pgRing").style.setProperty("--pct", pct);
   $("pgMet").textContent = met.length;
-  $("pgOf").textContent = "of " + goals.length;
-  $("pgSum").innerHTML = open.length
-    ? "<em>" + open.length + "</em> goal" + (open.length === 1 ? "" : "s") + " still open"
-    : "<em>every</em> declared goal is at target";
+  $("pgOf").textContent = "of " + real.length;
+  const subMet = subs.filter(g => g.met).length;
+  $("pgSum").innerHTML = (open.length
+      ? "<em>" + open.length + "</em> goal" + (open.length === 1 ? "" : "s") + " still open"
+      : "<em>every</em> declared goal is at target")
+    + (subs.length ? "<br><span style='font-size:11.5px'>plus " + subMet + " of " + subs.length
+       + " completed sub-checks — activation proofs for these goals, not goals themselves</span>" : "");
 
   // open goals, nearest-to-done first, so the ones about to close are visible
   open.sort((a,b) => (b.pct == null ? -1 : b.pct) - (a.pct == null ? -1 : a.pct));
@@ -576,18 +584,28 @@ function renderProgress(payload){
   }).join("");
 
   const tog = $("pgToggle"), list = $("pgMetList");
-  if (!met.length){ tog.hidden = true; list.hidden = true; return; }
+  const closed = met.concat(subs.filter(g => g.met));
+  if (!closed.length){ tog.hidden = true; list.hidden = true; return; }
   tog.hidden = false;
-  tog.textContent = (metGoalsOpen ? "▾  hide " : "▸  show ") + met.length + " goal" +
-                    (met.length === 1 ? "" : "s") + " already met";
+  tog.textContent = (metGoalsOpen ? "▾  hide " : "▸  show ") + closed.length +
+                    " completed check" + (closed.length === 1 ? "" : "s");
   list.hidden = !metGoalsOpen;
   if (metGoalsOpen){
-    // GROUPED by plain phrase: many slice checks share one, and 38 near-identical rows is noise.
-    const by = {};
-    met.forEach(g => { const k = g.label || g.name; by[k] = (by[k] || 0) + 1; });
-    list.innerHTML = Object.keys(by).sort().map(k =>
-      '<span class="pg-chip"><b>✓</b> ' + esc(k) + (by[k] > 1 ? " ×" + by[k] : "") + '</span>'
-    ).join("");
+    // Grouped by phrase because 36 share one, but each chip names its COUNT and the goals are listed
+    // FIRST and separately - collapsing 38 into 3 unlabelled chips read as "data missing", which is how
+    // this was spotted.
+    const chip = (k, n, isGoal) => '<span class="pg-chip"><b>✓</b> ' + esc(k) +
+      (n > 1 ? " ×" + n : "") + (isGoal ? "" : "") + '</span>';
+    const byG = {}, byS = {};
+    met.forEach(g => { const k = g.label || g.name; byG[k] = (byG[k] || 0) + 1; });
+    subs.filter(g => g.met).forEach(g => { const k = g.label || g.name; byS[k] = (byS[k] || 0) + 1; });
+    let html = Object.keys(byG).sort().map(k => chip(k, byG[k], true)).join("");
+    if (Object.keys(byS).length){
+      html += '<div class="pg-note" style="width:100%;margin-top:6px">sub-checks (activation proofs, '
+            + 'grouped - they share a description because they slice one goal):</div>'
+            + Object.keys(byS).sort().map(k => chip(k, byS[k], false)).join("");
+    }
+    list.innerHTML = html;
   }
 }
 

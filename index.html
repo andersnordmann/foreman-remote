@@ -48,8 +48,9 @@
      tell which goal the running work was for. The accent bar and badge make the answer findable at a
      glance, and the row is sorted to the top so it does not hide behind five others. */
   .pg-row.act { border-left:3px solid var(--accent); padding-left:9px; margin-left:-12px; }
+  /* a BLOCK on its own line - inside .pg-lab it was clipped by that span's ellipsis and never appeared */
   .pg-now { color:var(--accent); font-size:10.5px; font-weight:600; letter-spacing:.02em;
-            white-space:nowrap; margin-left:8px; }
+            margin:1px 0 2px 0; }
   .pg-now .dot { display:inline-block; width:6px; height:6px; border-radius:50%;
                  background:var(--accent); margin-right:5px; vertical-align:middle; }
   .pg-top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:12.5px; }
@@ -659,16 +660,17 @@ function renderProgress(payload){
               : known ? (esc(g.origin) + " " + AR + " " + esc(g.now) + "  ·  " + esc(Math.round(g.pct)) + "%")
                       : (esc(g.now) + " to go");
     return '<div class="pg-row' + (g.active ? ' act' : '') + '">'
-      + '<div class="pg-top"><span class="pg-lab">' + esc(g.label || g.name)
-      // A MET goal can still be the live item: its metric is at target but the item stays open on tracked
-      // debt. Saying "being worked on now" on a finished goal reads as a contradiction against the very
-      // same row's "met" - so the wording splits. Seen live: the leftover-hidden-rows goal closed at
-      // 391 -> 0 and the run carried straight on with that item into the next cycle.
-      + (g.active ? '<span class="pg-now"><span class="dot"></span>'
-                    + (g.met ? 'reached - finishing related work' : 'being worked on now')
-                    + '</span>' : '')
-      + '</span>'
+      + '<div class="pg-top"><span class="pg-lab">' + esc(g.label || g.name) + '</span>'
       + '<span class="pg-num"' + (g.met ? ' style="color:var(--ok)"' : '') + '>' + num + '</span></div>'
+      // ITS OWN LINE, not inside .pg-lab. akn's screenshot showed the accent bar with NO text beside it:
+      // .pg-lab is `overflow:hidden; text-overflow:ellipsis; white-space:nowrap`, so a badge placed inside
+      // it is CLIPPED by the very label it sits after - on a phone, with these label lengths, always. The
+      // result was an unexplained blue bar next to a green "met" goal, which is worse than no marker.
+      // A MET goal can still be the live item: metric at target, item held open by tracked debt.
+      + (g.active ? '<div class="pg-now"><span class="dot"></span>'
+                    + (g.met ? 'reached - still finishing related work on this task'
+                             : 'being worked on now')
+                    + '</div>' : '')
       + '<div class="pg-track' + (known ? '' : ' unknown') + '">'
       + (known ? '<div class="pg-fill' + (g.met ? ' done' : '') + '" style="width:' + w + '%"></div>' : '')
       + '</div>'

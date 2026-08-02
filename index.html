@@ -561,9 +561,9 @@ function setControlBtns(state){
 //   * a goal whose STARTING value was never recorded gets a hatched track and says so, rather than a 0%
 //     bar that reads as "no progress";
 //   * met goals are collapsed and GROUPED - 38 rows, many sharing a phrase, is noise, not information.
-let metGoalsOpen = false;
+let hideMetGoals = false;   // reached targets are SHOWN by default; this is the opt-in to hide them
 const subsOpenFor = {};   // goal name -> is its sub-check list expanded
-function toggleMetGoals(){ metGoalsOpen = !metGoalsOpen; renderProgress(lastProgress); }
+function toggleMetGoals(){ hideMetGoals = !hideMetGoals; renderProgress(lastProgress); }
 function toggleSubs(name){ subsOpenFor[name] = !subsOpenFor[name]; renderProgress(lastProgress); }
 let lastProgress = null;
 
@@ -624,7 +624,19 @@ function renderProgress(payload){
       + (kn ? '<div class="pg-fill' + (x.met ? ' done' : '') + '" style="width:' + w + '%"></div>' : '')
       + '</div></div>';
   };
-  $("pgList").innerHTML = open.concat(met).map(g => {
+  // THE OPTION TO HIDE REACHED TARGETS, which akn asked for at the same time as showing them: "should the
+  // already reached targets be shown too? maybe with an option to hide them?" Shown was delivered; the
+  // option was not, and `metGoalsOpen` sat here as dead code that nothing read. Default is SHOWN, because
+  // hiding them by default is the separate complaint ("where are the two completed goals?").
+  const _shownGoals = hideMetGoals ? open : open.concat(met);
+  if (met.length) {
+    $("pgToggle").hidden = false;
+    $("pgToggle").textContent = (hideMetGoals ? "Show " : "Hide ") + met.length + " reached target"
+                              + (met.length === 1 ? "" : "s");
+  } else {
+    $("pgToggle").hidden = true;      // nothing reached yet - a control that hides nothing is noise
+  }
+  $("pgList").innerHTML = _shownGoals.map(g => {
     const known = (g.pct != null);
     const w = known ? Math.max(2, Math.round(g.pct)) : 0;   // >=2% so a real bar is never invisible
     // The number column now carries MARKUP (the nudged arrow), so it is built from escaped parts rather
@@ -661,9 +673,8 @@ function renderProgress(payload){
       + '</div>';
   }).join("");
 
-  // Sub-checks are nested under their goal now, so the bottom expander has nothing left to hold. Kept
-  // hidden rather than removed from the markup so an older cached page cannot show an orphaned control.
-  $("pgToggle").hidden = true;
+  // pgToggle is no longer the sub-check expander (sub-checks nest under their own goal); it now carries
+  // the hide/show control for reached targets, set above. Only the old grouped-chip list is retired.
   $("pgMetList").hidden = true;
 }
 

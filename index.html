@@ -44,6 +44,14 @@
   .pg-sum em { color:var(--fg); font-style:normal; font-weight:600; }
   .pg-list { margin-top:12px; display:flex; flex-direction:column; gap:11px; }
   .pg-row { display:flex; flex-direction:column; gap:5px; }
+  /* THE ACTIVE GOAL. Four surfaces described the same run and none named the same thing, so you could not
+     tell which goal the running work was for. The accent bar and badge make the answer findable at a
+     glance, and the row is sorted to the top so it does not hide behind five others. */
+  .pg-row.act { border-left:3px solid var(--accent); padding-left:9px; margin-left:-12px; }
+  .pg-now { color:var(--accent); font-size:10.5px; font-weight:600; letter-spacing:.02em;
+            white-space:nowrap; margin-left:8px; }
+  .pg-now .dot { display:inline-block; width:6px; height:6px; border-radius:50%;
+                 background:var(--accent); margin-right:5px; vertical-align:middle; }
   .pg-top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:12.5px; }
   .pg-lab { color:var(--fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .pg-num { color:var(--mut); font-variant-numeric:tabular-nums; flex:0 0 auto; font-size:11.5px; }
@@ -604,7 +612,10 @@ function renderProgress(payload){
   // EVERY real goal is listed, met ones included. There are only a handful, and burying the finished ones
   // behind a toggle alongside 36 sub-checks made them unfindable - "where are the two completed goals?"
   // Open first (nearest-to-done leading), then the met ones as completed bars.
-  open.sort((a,b) => (b.pct == null ? -1 : b.pct) - (a.pct == null ? -1 : a.pct));
+  // ACTIVE FIRST, then nearest-to-done. The question 'which one is being worked on right now'
+  // should not require scanning the list.
+  open.sort((a,b) => (b.active ? 1 : 0) - (a.active ? 1 : 0)
+                  || (b.pct == null ? -1 : b.pct) - (a.pct == null ? -1 : a.pct));
   const subsOf = {};
   subs.forEach(x => { const k = x.parent || "_"; (subsOf[k] = subsOf[k] || []).push(x); });
   const subRow = x => {
@@ -647,8 +658,10 @@ function renderProgress(payload){
     const num = g.met ? (TK + " met  ·  " + esc(g.origin) + " " + AR + " " + esc(g.now))
               : known ? (esc(g.origin) + " " + AR + " " + esc(g.now) + "  ·  " + esc(Math.round(g.pct)) + "%")
                       : (esc(g.now) + " to go");
-    return '<div class="pg-row">'
-      + '<div class="pg-top"><span class="pg-lab">' + esc(g.label || g.name) + '</span>'
+    return '<div class="pg-row' + (g.active ? ' act' : '') + '">'
+      + '<div class="pg-top"><span class="pg-lab">' + esc(g.label || g.name)
+      + (g.active ? '<span class="pg-now"><span class="dot"></span>being worked on now</span>' : '')
+      + '</span>'
       + '<span class="pg-num"' + (g.met ? ' style="color:var(--ok)"' : '') + '>' + num + '</span></div>'
       + '<div class="pg-track' + (known ? '' : ' unknown') + '">'
       + (known ? '<div class="pg-fill' + (g.met ? ' done' : '') + '" style="width:' + w + '%"></div>' : '')

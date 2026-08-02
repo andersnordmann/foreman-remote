@@ -660,7 +660,13 @@ function renderProgress(payload){
                       : (esc(g.now) + " to go");
     return '<div class="pg-row' + (g.active ? ' act' : '') + '">'
       + '<div class="pg-top"><span class="pg-lab">' + esc(g.label || g.name)
-      + (g.active ? '<span class="pg-now"><span class="dot"></span>being worked on now</span>' : '')
+      // A MET goal can still be the live item: its metric is at target but the item stays open on tracked
+      // debt. Saying "being worked on now" on a finished goal reads as a contradiction against the very
+      // same row's "met" - so the wording splits. Seen live: the leftover-hidden-rows goal closed at
+      // 391 -> 0 and the run carried straight on with that item into the next cycle.
+      + (g.active ? '<span class="pg-now"><span class="dot"></span>'
+                    + (g.met ? 'reached - finishing related work' : 'being worked on now')
+                    + '</span>' : '')
       + '</span>'
       + '<span class="pg-num"' + (g.met ? ' style="color:var(--ok)"' : '') + '>' + num + '</span></div>'
       + '<div class="pg-track' + (known ? '' : ' unknown') + '">'

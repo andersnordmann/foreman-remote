@@ -581,8 +581,11 @@ function renderProgress(payload){
   $("pgSum").innerHTML = (open.length
       ? "<em>" + open.length + "</em> goal" + (open.length === 1 ? "" : "s") + " still open"
       : "<em>every</em> declared goal is at target")
-    + (subs.length ? "<br><span style='font-size:11.5px'>plus " + subMet + " of " + subs.length
-       + " completed sub-checks — activation proofs for these goals, not goals themselves</span>" : "");
+    // NOT "plus N ...": chained onto "still open" that reads as N MORE open things (akn: "reads as if the
+    // 36 are still open too"). Leading with the completed count makes the state unambiguous before the
+    // noun arrives.
+    + (subs.length ? "<br><span style='font-size:11.5px'>" + subMet + " of " + subs.length
+       + " sub-checks complete — activation proofs for these goals, not goals themselves</span>" : "");
 
   // EVERY real goal is listed, met ones included. There are only a handful, and burying the finished ones
   // behind a toggle alongside 36 sub-checks made them unfindable - "where are the two completed goals?"

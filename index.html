@@ -146,6 +146,7 @@
   .q-dim{ opacity:.45; }   /* wontfix: a closed decision — recedes */
   .qtri { cursor:pointer; user-select:none; width:14px; display:inline-block; text-align:center; color:var(--mut); }
   .qhid { color:var(--mut); font-size:11px; }   /* '(+N)' hidden-descendant count on a collapsed parent */
+  .qwait { color:var(--mut); font-size:11px; margin-left:6px; }  /* 'waiting on #X' - WHY a pending item is not being worked */
   .qprog { color:var(--mut); font-size:11px; }   /* '#8: M/N done' sub-task progress on a decomposed parent */
   .qprog-done { color:var(--ok); font-weight:600; }   /* all sub-tasks closed (bright = stuck-rollup tell if parent still open) */
   .qtools { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:0 0 10px; }
@@ -970,6 +971,12 @@ function renderQueue(){
     html += `<div class="qitem${rowcls}"${indent}><div class="qhead">`+
       tri+
       `<span class="qst ${working?'s-running':'s-'+esc(i.status)}">${working?'▶ working':esc(i.status)}</span>`+
+      // WHY it is not being worked. "pending" alone read identically for an item that is next in line and one
+      // blocked behind a sibling, so the to-do list could not answer "how come these two aren't being worked?"
+      // - akn had to ask. The select rule is "highest-priority pending whose depends_on are all done", so a
+      // blocked item is normal and expected; it just has to SAY so. Only not-done dependencies are listed.
+      (!working && i.status === 'pending' && i.waiting_on && i.waiting_on.length
+        ? `<span class="qwait">waiting on ${esc(i.waiting_on.join(', '))}</span>` : '')+
       `<b>${esc(i.ledger||i.id)}</b>${hid}${prog}<span class="muted">${esc(i.ledger?i.id:"")}</span>${btn}</div>`+
       (qShowDesc && i.title ? `<div class="qtitle" title="${esc(i.title)}">${esc(i.title)}</div>` : "")+
       `</div>`;

@@ -1011,6 +1011,7 @@ function renderStory(){
 // hash the supervisor publishes for the file it holds. Deliberately NOT a version stamp: a stamp reports what
 // someone remembered to write, this compares what is actually running. Silent whenever it cannot tell.
 let _selfSha = null;
+let _staleSaid = false;   // once per page load: a staleness warning on every 10s refresh is noise, not news
 async function selfSha(){
   if (_selfSha !== null) return _selfSha;
   try {
@@ -1029,7 +1030,18 @@ async function checkPageFresh(){
   if (!want) return;                    // a supervisor that does not publish it yet - not a staleness signal
   const mine = await selfSha();
   if (!mine || mine === want) return;   // cannot tell, or already current
-  log("this page is OLDER than the copy on the PC - re-serve it to get the current version", true);
+  // SAY WHAT TO DO, ONCE. The first version said "re-serve it to get the current version" and repeated on every
+  // 10s refresh. akn: "what am I supposed to do with this info? reloading the page client side doesn't do
+  // anything." He was right twice: a client reload re-fetches the SAME stale bytes from wherever this page is
+  // hosted, so the one action it suggests cannot work - and an alarm with no usable remedy, repeated every ten
+  // seconds, is exactly the noise this check was built to remove from other surfaces. It now names the file to
+  // copy and says plainly why reloading will not help.
+  if (_staleSaid) return;
+  _staleSaid = true;
+  log("this page is an OLD COPY. Reloading will NOT help - it re-fetches the same stale file from wherever this "
+      + "page is served. To update: copy web/turso_remote.html from the claude-foreman repo over the file you "
+      + "opened (or re-upload it to whatever serves it), then load it again. Everything shown is still LIVE and "
+      + "correct - only the page's own wording and layout are behind.", true);
 }
 
 async function refresh(){

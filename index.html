@@ -732,8 +732,11 @@ function renderProgress(payload){
           // boundary: the task covers one pattern; the remainder is a different one other tasks build for.
           // NO INVENTED REASON - "each covers one specific pattern" was a rule inferred from two items and a
           // third contradicts it. State the fact; the task's own description carries the reason.
-          if (c.left_by_design) s += '; ' + esc(c.left_by_design) + ' sit inside tasks whose own target is not '
-                + 'zero, so those finish with them still there - each of those tasks says why';
+          // Say the goal still REQUIRES them. "those finish with them still there" reads as "never be done",
+          // which is false: they are part of this goal's count, and a goal is met only at its target.
+          if (c.left_by_design) s += '; ' + esc(c.left_by_design) + ' will not be cleared by those tasks, whose '
+                + 'own targets stop short - but this goal still counts them, so it cannot be signed off until '
+                + 'they are gone too';
           if (c.outside) s += '; ' + esc(c.outside) + ' have no task-level measurement, so progress on them '
                 + 'shows up only in this number';
           return s + '.</div>';

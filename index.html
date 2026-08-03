@@ -700,8 +700,14 @@ function renderProgress(payload){
       // state rather than quietly dropped from the met count, or it just looks stuck at 100%.
       + (g.awaiting_debt
            ? '<div class="pg-now" style="color:var(--warn,#d29922)"><span class="dot" style="background:var(--warn,#d29922)"></span>reached its number - waiting on '
-             + (g.tasks && g.tasks.length ? esc(g.tasks.join(', ')) : 'deferred work')
-             + (g.open_debt ? ' (' + esc(g.open_debt) + ' deferred items still to clear)' : '')
+             // NOT a raw internal id in front of a reader. An engine-minted driver has no ledger ref and
+             // no plain title, so this read "waiting on L1finish2" - an id nobody can act on. A ref starting
+             // '#' is the shared name every surface uses and stays; anything else becomes words.
+             + (g.tasks && g.tasks.length
+                  ? esc([...new Set(g.tasks.map(x => String(x).startsWith('#') ? String(x)
+                                    : 'the finishing work on this check (' + String(x) + ')'))].join(', '))
+                  : 'deferred work')
+             + (g.open_debt ? ' (' + esc(g.open_debt) + ' pieces of deferred work still to clear)' : '')
              + '</div>'
            : ((g.active && !g.met) ? '<div class="pg-now"><span class="dot"></span>being worked on now</div>' : ''))
       // WHICH TASKS STAND BETWEEN THIS GOAL AND DONE. akn: "how does the user know that it's L1finish2

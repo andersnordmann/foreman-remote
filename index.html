@@ -731,8 +731,10 @@ function renderProgress(payload){
                 + ' committed by tasks that measure their own progress';
           // NOT "will still be there" - that read as defects being accepted. A non-zero target is a SCOPE
           // boundary: the task covers one pattern; the remainder is a different one other tasks build for.
-          if (c.left_by_design) s += '; ' + esc(c.left_by_design) + " are outside those tasks' own scope - "
-                + 'each covers one specific pattern, and the other tasks listed cover the rest';
+          // NO INVENTED REASON - "each covers one specific pattern" was a rule inferred from two items and a
+          // third contradicts it. State the fact; the task's own description carries the reason.
+          if (c.left_by_design) s += '; ' + esc(c.left_by_design) + ' sit inside tasks whose own target is not '
+                + 'zero, so those finish with them still there - each of those tasks says why';
           if (c.outside) s += '; ' + esc(c.outside) + ' have no task-level measurement, so progress on them '
                 + 'shows up only in this number';
           return s + '.</div>';

@@ -723,22 +723,26 @@ function renderProgress(payload){
       + (() => {
           const c = coverage[g.name];
           if (g.met || !c || !c.need) return '';
-          // NOT "not covered by any task" - akn read that as 56 defects having no owner: "this goal text
-          // sounds very alarming to a user." They have no task-level MEASUREMENT; they are still counted by
-          // the goal's own figure above, and most sit inside broader tasks. State the fact, not the inference.
-          let s = '<div class="pg-tasks">' + esc(c.need) + ' still to remove: ' + esc(c.chartered)
-                + ' committed by tasks that measure their own progress';
-          // NOT "will still be there" - that read as defects being accepted. A non-zero target is a SCOPE
-          // boundary: the task covers one pattern; the remainder is a different one other tasks build for.
-          // NO INVENTED REASON - "each covers one specific pattern" was a rule inferred from two items and a
-          // third contradicts it. State the fact; the task's own description carries the reason.
-          // Say the goal still REQUIRES them. "those finish with them still there" reads as "never be done",
-          // which is false: they are part of this goal's count, and a goal is met only at its target.
-          if (c.left_by_design) s += '; ' + esc(c.left_by_design) + ' will not be cleared by those tasks, whose '
-                + 'own targets stop short - but this goal still counts them, so it cannot be signed off until '
-                + 'they are gone too';
-          if (c.outside) s += '; ' + esc(c.outside) + ' have no task-level measurement, so progress on them '
-                + 'shows up only in this number';
+          // THIS MUST MATCH progress.coverage_sentence() CHARACTER FOR CHARACTER. It is the only copy that
+          // cannot call the Python one, and while there were three copies they DRIFTED: this said "tasks"
+          // and "no task-level measurement" where the text view said "sub-checks", for the identical
+          // number - one thing under two names, which is the defect Item 56 was about. A test renders both
+          // and requires them equal, so this can never quietly diverge again.
+          // The wording states the ARITHMETIC consequence and never a reason: five earlier versions all read
+          // as abandonment because they described a mechanism and left the meaning to be inferred.
+          // Clauses are OMITTED at zero rather than printed as "0 committed by ...", and every pronoun agrees
+          // in number - a goal down to its last row used to read "1 ... counts them ... until they are gone".
+          const _cs = (n, one, many) => (n === 1 ? one : many);
+          let parts = [];
+          if (c.chartered) parts.push(esc(c.chartered) + ' committed by sub-checks that measure their own progress');
+          if (c.left_by_design) parts.push(esc(c.left_by_design) + ' will not be cleared by those sub-checks, '
+                + 'whose own targets stop short - but this goal still counts ' + _cs(c.left_by_design, 'it', 'them')
+                + ', so it cannot be signed off until ' + _cs(c.left_by_design, 'it is', 'they are') + ' gone too');
+          if (c.outside) parts.push(esc(c.outside) + ' ' + _cs(c.outside, 'has', 'have') + ' no sub-check of '
+                + _cs(c.outside, 'its own', 'their own') + ', so progress on ' + _cs(c.outside, 'it', 'them')
+                + ' shows up only in this number');
+          let s = '<div class="pg-tasks">' + esc(c.need) + ' still to remove'
+                + (parts.length ? ': ' + parts.join('; ') : '');
           return s + '.</div>';
         })()
       + '<div class="pg-track' + (known ? '' : ' unknown') + '">'

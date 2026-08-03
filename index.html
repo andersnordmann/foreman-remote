@@ -1005,6 +1005,33 @@ function renderStory(){
     : "<div class='muted'>No story yet — it fills in as the run works.</div>";
 }
 
+// IS THIS PAGE THE ONE ON THE PC? This file is served from wherever the operator put it and installed as a
+// PWA, so changing it in the repo does NOT change what a phone renders until that copy is re-served - and a
+// months-old copy renders happily and authoritatively. It hashes the bytes IT was served and compares with the
+// hash the supervisor publishes for the file it holds. Deliberately NOT a version stamp: a stamp reports what
+// someone remembered to write, this compares what is actually running. Silent whenever it cannot tell.
+let _selfSha = null;
+async function selfSha(){
+  if (_selfSha !== null) return _selfSha;
+  try {
+    const r = await fetch(location.href, {cache: "reload"});
+    const b = await r.arrayBuffer();
+    const d = await crypto.subtle.digest("SHA-256", b);
+    _selfSha = Array.from(new Uint8Array(d)).map(x => x.toString(16).padStart(2, "0")).join("");
+  } catch(e){
+    _selfSha = "";   // a file:// copy, a blocked fetch, or no crypto.subtle - say NOTHING rather than guess
+  }
+  return _selfSha;
+}
+async function checkPageFresh(){
+  const row = lastStatus.find(r => r.id === selInst());
+  const want = row && row.page_sha;
+  if (!want) return;                    // a supervisor that does not publish it yet - not a staleness signal
+  const mine = await selfSha();
+  if (!mine || mine === want) return;   // cannot tell, or already current
+  log("this page is OLDER than the copy on the PC - re-serve it to get the current version", true);
+}
+
 async function refresh(){
   try{
     lastStatus  = await pipeline("SELECT * FROM foreman_status ORDER BY id");
@@ -1017,6 +1044,7 @@ async function refresh(){
     renderStory();
     if ($("pane-qa") && !$("pane-qa").hidden) renderQA();   // Item 2: poll for new answers while the Q&A tab is open
     if (_refreshFails){ log("connection recovered"); _refreshFails = 0; }
+    checkPageFresh();   // says so if this copy is older than the one on the PC; silent when it cannot tell
   } catch(e){
     // Log only the FIRST failure of a streak (a backgrounded tab resuming before the network is
     // back, a Turso edge blip): the 10s poll IS the retry, so don't spam a line every cycle.

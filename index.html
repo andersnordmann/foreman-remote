@@ -718,11 +718,15 @@ function renderProgress(payload){
       + (() => {
           const c = coverage[g.name];
           if (g.met || !c || !c.need) return '';
-          let s = '<div class="pg-tasks">of the ' + esc(c.need) + ' still to remove, the tasks above have '
-                + 'committed to ' + esc(c.chartered);
-          if (c.left_by_design) s += '; ' + esc(c.left_by_design) + ' will be left standing on purpose '
-                + '(a task that stops short of zero)';
-          if (c.outside) s += '; ' + esc(c.outside) + ' is not covered by any task that can measure it';
+          // NOT "not covered by any task" - akn read that as 56 defects having no owner: "this goal text
+          // sounds very alarming to a user." They have no task-level MEASUREMENT; they are still counted by
+          // the goal's own figure above, and most sit inside broader tasks. State the fact, not the inference.
+          let s = '<div class="pg-tasks">' + esc(c.need) + ' still to remove: ' + esc(c.chartered)
+                + ' committed by tasks that measure their own progress';
+          if (c.left_by_design) s += '; ' + esc(c.left_by_design) + ' will still be there when those finish, '
+                + 'because a task deliberately stops short of zero';
+          if (c.outside) s += '; ' + esc(c.outside) + ' have no task-level measurement, so progress on them '
+                + 'shows up only in this number';
           return s + '.</div>';
         })()
       + '<div class="pg-track' + (known ? '' : ' unknown') + '">'

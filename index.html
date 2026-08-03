@@ -1024,24 +1024,41 @@ async function selfSha(){
   }
   return _selfSha;
 }
+// TELL THE HARNESS, NOT THE READER. The page is the only party that knows which build is actually being
+// viewed, so it records that build for the run's own checks to compare. Without this the staleness has no
+// owner: the reader cannot act on it and the harness cannot see it, which is how the alarm ended up on the
+// one screen where it was useless. Best-effort and silent - a viewer that cannot write must never be nagged
+// about it, and this must never interfere with reading the run.
+async function reportViewerBuild(sha){
+  try {
+    await pipeline("UPDATE foreman_status SET viewer_page_sha=?, viewer_seen_at=? WHERE id=?",
+                   [arg(sha), arg(new Date().toISOString()), arg(selInst())]);
+  } catch(e){ /* an older DB without those columns, or a read-only viewer: nothing to say to the reader */ }
+}
 async function checkPageFresh(){
   const row = lastStatus.find(r => r.id === selInst());
   const want = row && row.page_sha;
   if (!want) return;                    // a supervisor that does not publish it yet - not a staleness signal
   const mine = await selfSha();
   if (!mine || mine === want) return;   // cannot tell, or already current
-  // SAY WHAT TO DO, ONCE. The first version said "re-serve it to get the current version" and repeated on every
-  // 10s refresh. akn: "what am I supposed to do with this info? reloading the page client side doesn't do
-  // anything." He was right twice: a client reload re-fetches the SAME stale bytes from wherever this page is
-  // hosted, so the one action it suggests cannot work - and an alarm with no usable remedy, repeated every ten
-  // seconds, is exactly the noise this check was built to remove from other surfaces. It now names the file to
-  // copy and says plainly why reloading will not help.
+  // NOT A TASK FOR THE READER. Two wrong versions preceded this. The first said "re-serve it", which akn
+  // answered with "what am I supposed to do with this info? reloading the page client side doesn't do
+  // anything" - true, a client reload re-fetches the same stale bytes. So I made it name the file to copy,
+  // and he answered that too: "if I'm reading this on my phone, how could I copy a file? and is that even a
+  // user task?" No, on both counts. There is no way to copy a repo file from a phone, and republishing this
+  // page was never his job - it is the harness owner's. An instruction the reader cannot carry out is worse
+  // than silence, because it reads as a demand and leaves the real work unowned.
+  //
+  // So this states only what a phone reader needs: the numbers are trustworthy, the page's own wording is
+  // behind, nothing here is for them to fix. The actual remedy is routed to whoever maintains the harness by
+  // reportViewerBuild() below, which records the build being viewed so the mismatch shows up in the run's own
+  // checks instead of on the reader's screen.
   if (_staleSaid) return;
   _staleSaid = true;
-  log("this page is an OLD COPY. Reloading will NOT help - it re-fetches the same stale file from wherever this "
-      + "page is served. To update: copy web/turso_remote.html from the claude-foreman repo over the file you "
-      + "opened (or re-upload it to whatever serves it), then load it again. Everything shown is still LIVE and "
-      + "correct - only the page's own wording and layout are behind.", true);
+  log("heads-up: the numbers and the story on this page are LIVE and correct, but the page itself is an older "
+      + "build, so some wording and layout are behind. Nothing for you to do - it is on the harness side, and "
+      + "the run now reports it there.", true);
+  reportViewerBuild(mine);
 }
 
 async function refresh(){

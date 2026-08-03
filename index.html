@@ -704,7 +704,10 @@ function renderProgress(payload){
              // ("waiting on L1finish2"), then an invented description, then the item's full description -
              // a sentence inside a sentence. What a reader needs here is WHY it is not signed off; the id
              // is only where to look, and the to-do list carries what each task actually is.
-             + (g.open_debt ? esc(g.open_debt) + ' pieces of deferred work must clear first'
+             // MUST MATCH progress.debt_phrase(). It read "1 pieces of deferred work" here too - the same
+             // count-then-plural-noun bug as the coverage sentence below, in the third copy of the phrase.
+             + (g.open_debt ? esc(g.open_debt) + (g.open_debt === 1 ? ' piece' : ' pieces')
+                              + ' of deferred work must clear first'
                             : 'deferred work must clear first')
              + (g.tasks && g.tasks.length ? ' (tracked as ' + esc(g.tasks.join(', ')) + ')' : '')
              + '</div>'

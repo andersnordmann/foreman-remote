@@ -723,8 +723,10 @@ function renderProgress(payload){
           // the goal's own figure above, and most sit inside broader tasks. State the fact, not the inference.
           let s = '<div class="pg-tasks">' + esc(c.need) + ' still to remove: ' + esc(c.chartered)
                 + ' committed by tasks that measure their own progress';
-          if (c.left_by_design) s += '; ' + esc(c.left_by_design) + ' will still be there when those finish, '
-                + 'because a task deliberately stops short of zero';
+          // NOT "will still be there" - that read as defects being accepted. A non-zero target is a SCOPE
+          // boundary: the task covers one pattern; the remainder is a different one other tasks build for.
+          if (c.left_by_design) s += '; ' + esc(c.left_by_design) + " are outside those tasks' own scope - "
+                + 'each covers one specific pattern, and the other tasks listed cover the rest';
           if (c.outside) s += '; ' + esc(c.outside) + ' have no task-level measurement, so progress on them '
                 + 'shows up only in this number';
           return s + '.</div>';

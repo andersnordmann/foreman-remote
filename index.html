@@ -628,7 +628,7 @@ function renderProgress(payload){
     // 36 are still open too"). Leading with the completed count makes the state unambiguous before the
     // noun arrives.
     + (subs.length ? "<br><span style='font-size:11.5px'>" + subMet + " of " + subs.length
-       + " sub-checks complete — activation proofs for these goals, not goals themselves</span>" : "")
+       + " sub-checks complete — small checks that prove one part of a goal works, not goals in themselves</span>" : "")
     ;   // the in-progress count lives on each goal's own control now - repeating it here said the same
         // thing twice and detached it from the goal it applies to.
 
@@ -699,15 +699,14 @@ function renderProgress(payload){
       // the reports involved; the card counted it as met anyway and overstated the score. Shown as its own
       // state rather than quietly dropped from the met count, or it just looks stuck at 100%.
       + (g.awaiting_debt
-           ? '<div class="pg-now" style="color:var(--warn,#d29922)"><span class="dot" style="background:var(--warn,#d29922)"></span>reached its number - waiting on '
-             // NOT a raw internal id in front of a reader. An engine-minted driver has no ledger ref and
-             // no plain title, so this read "waiting on L1finish2" - an id nobody can act on. A ref starting
-             // '#' is the shared name every surface uses and stays; anything else becomes words.
-             + (g.tasks && g.tasks.length
-                  ? esc([...new Set(g.tasks.map(x => String(x).startsWith('#') ? String(x)
-                                    : 'the finishing work on this check (' + String(x) + ')'))].join(', '))
-                  : 'deferred work')
-             + (g.open_debt ? ' (' + esc(g.open_debt) + ' pieces of deferred work still to clear)' : '')
+           ? '<div class="pg-now" style="color:var(--warn,#d29922)"><span class="dot" style="background:var(--warn,#d29922)"></span>reached its number, NOT signed off yet: '
+             // MEANING IN THE SENTENCE, ID AS A POINTER. Earlier versions put an id here with no meaning
+             // ("waiting on L1finish2"), then an invented description, then the item's full description -
+             // a sentence inside a sentence. What a reader needs here is WHY it is not signed off; the id
+             // is only where to look, and the to-do list carries what each task actually is.
+             + (g.open_debt ? esc(g.open_debt) + ' pieces of deferred work must clear first'
+                            : 'deferred work must clear first')
+             + (g.tasks && g.tasks.length ? ' (tracked as ' + esc(g.tasks.join(', ')) + ')' : '')
              + '</div>'
            : ((g.active && !g.met) ? '<div class="pg-now"><span class="dot"></span>being worked on now</div>' : ''))
       // WHICH TASKS STAND BETWEEN THIS GOAL AND DONE. akn: "how does the user know that it's L1finish2

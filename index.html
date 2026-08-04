@@ -838,7 +838,26 @@ function renderSelected(){
   // #5: the always-visible actionable alert (shown on EVERY tab). Non-empty attention => a worker
   // can't do its job / a task is stuck and needs the user.
   const attnEl = $("attn");
-  if (attnEl){ const at = (s && s.attention) ? String(s.attention) : ""; attnEl.hidden = !at; attnEl.textContent = at; }
+  if (attnEl){
+    const at = (s && s.attention) ? String(s.attention) : "";
+    attnEl.hidden = !at;
+    // WITH ITS AGE. A banner cannot be judged without one: the row's own clocks move constantly (the heartbeat
+    // every 25s, updated_at at every phase), so a stale banner sits on a fresh row looking current. On
+    // 2026-08-04 one written at ~22:44 was still being read as live after the run was back up and clean.
+    // Age only - not the raw timestamp - because the relay stores UTC and this reader is on a different clock,
+    // and "20 min ago" needs no conversion to be right.
+    let age = "";
+    const when = (s && s.attention_at) ? String(s.attention_at) : "";
+    if (at && when){
+      const t = Date.parse(when.replace(" ", "T") + (/[zZ]|[+-]\d\d:?\d\d$/.test(when) ? "" : "Z"));
+      if (!isNaN(t)){
+        const m = Math.max(0, Math.round((now - t) / 60000));
+        age = m < 1 ? " (just now)" : m < 60 ? ` (${m} min ago)`
+              : ` (${Math.floor(m / 60)}h ${m % 60}m ago)`;
+      }
+    }
+    attnEl.textContent = at + age;
+  }
   renderProgress(s ? s.progress : null);
   if (s){
     $("state").textContent = s.state || "—";

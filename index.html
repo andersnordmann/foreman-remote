@@ -1120,11 +1120,15 @@ async function checkPageFresh(){
   // behind, nothing here is for them to fix. The actual remedy is routed to whoever maintains the harness by
   // reportViewerBuild() below, which records the build being viewed so the mismatch shows up in the run's own
   // checks instead of on the reader's screen.
+  // NOTHING IS SAID TO THE READER. akn, looking at the line this used to print: "what am I supposed to do with
+  // that heads up?" Nothing - the line said so itself ("Nothing for you to do") and was on his screen anyway.
+  // A message whose own text admits it is not actionable is noise, and I had already removed a READER TASK from
+  // this same warning earlier today without noticing that the whole message was the problem.
+  // The mismatch still has an owner: reportViewerBuild() records the build actually being viewed, so the run's
+  // own checks (tests/preflight.py) raise it with whoever maintains the harness. That is where it can be acted
+  // on; the phone cannot re-serve itself.
   if (_staleSaid) return;
   _staleSaid = true;
-  log("heads-up: the numbers and the story on this page are LIVE and correct, but the page itself is an older "
-      + "build, so some wording and layout are behind. Nothing for you to do - it is on the harness side, and "
-      + "the run now reports it there.", true);
   reportViewerBuild(mine);
 }
 

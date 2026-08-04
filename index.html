@@ -1340,12 +1340,20 @@ function populateStepPicker(recentStepsJson){
       // The SAME two chips the story lines carry, from the same resolvers, so a step in this list and the
       // same step in the story read as one thing (akn: "the q&a should too").
       const step = phaseStep(r.phase);
-      const chips = taskChip(r.item)
-                  + (step ? '<span class="chip-ph">'+esc(step)+'</span>' : "");
+      const chip = taskChip(r.item);
+      const chips = chip + (step ? '<span class="chip-ph">'+esc(step)+'</span>' : "");
+      // ONE FACT, ONCE. A worker step's label already OPENS with the task ref ("#2c Part of stopping extra
+      // content: ...") while a quality check's does not - so when the chip shows that ref, the label's own
+      // leading copy of it comes off. Two copies side by side read as two facts, the same reason the time is
+      // not repeated inside the label. Only a LEADING ref is removed: the same text further in belongs to the
+      // sentence.
+      const ref = itemRef(r.item);
+      let lbl = r.lbl;
+      if (chip && ref && lbl.indexOf(ref) === 0) lbl = lbl.slice(ref.length).replace(/^[\s:-]+/, "") || r.lbl;
       return '<button type="button" class="sc-row" role="option" data-v="'+esc(r.v)+'"'
            + ' aria-selected="'+(r.v === sel.value ? 'true' : 'false')+'"'
            + ' onclick="qaScopePick(this.getAttribute(\'data-v\'))">'
-           + chips + '<span class="sc-lbl">'+esc(r.lbl)+'</span>'
+           + chips + '<span class="sc-lbl">'+esc(lbl)+'</span>'
            + (r.at ? '<span class="sc-at">'+esc(r.at)+'</span>' : '') + '</button>';
     }).join("");
     list.setAttribute("role", "listbox");

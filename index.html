@@ -227,6 +227,37 @@
             font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace; }
   .s-text { flex:1 1 auto; min-width:0; word-break:break-word; }
   .s-newest .s-text { color:#fff; font-weight:600; }
+  /* WHICH TASK AND WHICH STEP a line belongs to: two small chips at the head of the sentence (akn: "the
+     story should carry both the id from the to-do list and the phase from the status"). The task chip shows
+     the SAME ref the to-do list and the goals card show, and the step chip uses the SAME word the status
+     stepper lights up - so one task reads as one thing on all three screens. Kept small and inline so they
+     wrap with the prose instead of pushing the timeline wider. */
+  .chip-id, .chip-ph { display:inline-block; border:1px solid var(--line); border-radius:999px;
+                       padding:0 6px; margin:0 4px 2px 0; white-space:nowrap;
+                       font:700 10px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .chip-id { color:#9fc7ff; border-color:rgba(56,139,253,.45); }
+  .chip-ph { color:var(--mut); font-weight:600; }
+  /* THE Q&A SCOPE LIST. It was a native <select>, and a phone renders that as an OS sheet: a large system
+     font, three lines per choice, no room for the task or the step (akn: "can the q&a list look a little
+     more sleek and modern (mainly smaller font)"). This is a list we control - one compact row per choice,
+     opened by a <details> so nothing extra has to be wired up to collapse it. The <select> stays in the
+     DOM (hidden) and remains the value everything else reads, so the ask path is untouched. Rows keep a
+     32px tap target: smaller TEXT, not a smaller thing to hit. */
+  .sc { border:1px solid var(--line); border-radius:10px; background:#0b0f14; }
+  .sc > summary { list-style:none; cursor:pointer; padding:7px 10px; font-size:12.5px; line-height:1.4;
+                  display:flex; align-items:center; gap:6px; }
+  .sc > summary::-webkit-details-marker { display:none; }
+  .sc > summary::after { content:"\25BE"; margin-left:auto; color:var(--mut); font-size:11px; }
+  .sc[open] > summary::after { content:"\25B4"; }
+  .sc[open] > summary { border-bottom:1px solid var(--line); }
+  .sc-list { display:grid; gap:3px; padding:6px; max-height:46vh; overflow-y:auto; }
+  .sc-row { display:flex; align-items:center; gap:6px; width:100%; min-height:32px; padding:5px 8px;
+            border:1px solid transparent; border-radius:8px; background:transparent; color:var(--fg);
+            font-size:12px; line-height:1.35; text-align:left; }
+  .sc-row[aria-selected="true"] { border-color:var(--accent); background:rgba(56,139,253,.14); font-weight:600; }
+  .sc-lbl { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sc-at { flex:0 0 auto; color:var(--mut); font-size:11px;
+           font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
 </style>
 <meta name="theme-color" content="#0e1116">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
@@ -368,12 +399,18 @@
   <div class="tabpane" id="pane-qa" hidden>
     <div class="card">
       <div class="muted" style="margin-bottom:8px">Ask about the <b>running step</b> (to decide whether to stop it) or about the <b>whole run</b> (progress, cost, what is done or stuck) - the foreman answers from the real transcript / run history (read-only, safe). Leave the box empty for a status + stop/continue recommendation, or type any question.</div>
-      <div class="muted" style="margin-bottom:6px">Scope:
-        <select id="qaScope" style="margin-left:6px;padding:2px 6px">
-          <option value="latest">the running step (default)</option>
-          <option value="run">the whole run (ask anything)</option>
-        </select>
-      </div>
+      <div class="muted" style="margin-bottom:4px">Scope</div>
+      <!-- The <select> is the VALUE (hidden, still read by qaAsk and still what a refresh preserves); the
+           <details> below is what you actually see and tap. Keeping both means the compact list is purely a
+           display change - nothing about asking, answering or routing moved. -->
+      <select id="qaScope" hidden>
+        <option value="latest">the running step (default)</option>
+        <option value="run">the whole run (ask anything)</option>
+      </select>
+      <details class="sc" id="qaScopeBox" style="margin-bottom:8px">
+        <summary id="qaScopeNow">the running step (default)</summary>
+        <div class="sc-list" id="qaScopeList"></div>
+      </details>
       <textarea id="qaInput" rows="2" placeholder="e.g. is it stuck? what has it changed? - or, for the whole run: how much is done? cost so far? anything stuck?" style="width:100%;box-sizing:border-box"></textarea>
       <div class="btns" style="grid-template-columns:1fr;margin-top:8px">
         <button id="qaAskBtn" class="b-resume" onclick="qaAsk()">Ask</button>
@@ -989,6 +1026,12 @@ function renderStory(){
   const s = lastStatus.find(r => r.id === selInst());
   let story = [];
   try { story = JSON.parse((s && s.story) || "[]"); } catch(e){ story = []; }
+  // The task and the cycle step for each line, published in the same order as the lines. Absent entirely
+  // when the run predates this (an older engine, or a page read between the two writes) - the lines then
+  // render exactly as they always did.
+  let smeta = [];
+  try { smeta = JSON.parse((s && s.story_meta) || "[]"); } catch(e){ smeta = []; }
+  if (!Array.isArray(smeta)) smeta = [];
   // Lift each entry's clock out of the sentence into a fixed-width gutter, and brighten the newest line
   // (the feed is newest-first, so index 0). The foreman writes entries as "[HH:MM] text"; anything else -
   // an older entry, a hand-written line - renders with an EMPTY gutter and its text unchanged, so no entry
@@ -998,9 +1041,18 @@ function renderStory(){
         const m = String(l).match(/^\s*\[(\d{1,2}:\d{2}(?::\d{2})?)\]\s*([\s\S]*)$/);
         const t   = m ? m[1] : "";
         const txt = (m ? m[2] : String(l)).trim();
+        // CHECK THE PAIRING BEFORE LABELLING. The lines and their facts are published together, but a page
+        // can still read a story one push newer than its facts (two different writers touch that column), and
+        // a line labelled with the PREVIOUS line's task would be a quiet lie. Each facts entry carries its
+        // own line's clock, so a mismatch shows no chips instead.
+        const md = smeta[i];
+        const paired = md && typeof md === "object" && (!md.t || !t || String(md.t) === t);
+        const step = paired ? phaseStep(md.phase) : "";
+        const chips = (paired ? taskChip(md.id) : "")
+                    + (step ? `<span class="chip-ph">${esc(step)}</span>` : "");
         return `<div class="srow${i === 0 ? " s-newest" : ""}">`
              + `<span class="s-time">${esc(t)}</span>`
-             + `<span class="s-text">${esc(txt)}</span></div>`;
+             + `<span class="s-text">${chips}${esc(txt)}</span></div>`;
       }).join("")
     : "<div class='muted'>No story yet — it fills in as the run works.</div>";
 }
@@ -1132,17 +1184,35 @@ const CYCLE_EXTRA = [
   ["hunt defects", ["critic"]],      // looks for defects the metrics do not measure
   ["challengers",  ["challenge"]],   // independent agents compete to crack a stuck task
 ];
+// WHICH CYCLE STEP a phase sentence names, as the step's own short label - the ONE place that mapping
+// lives. The stepper below marks a step with it, and the story lines and the Q&A rows label themselves with
+// it, so a task's step reads identically on all three (akn: the story and the Q&A should carry the phase
+// from the status). Returns "" when nothing matches, and every caller then shows NOTHING: naming the wrong
+// step is worse than naming none - the same rule the stepper already followed.
+// The conditional steps are matched FIRST because they are the more specific phrases; within the main path,
+// prep is tested before work because "pre-work" and "pre-worker" both contain "work".
+function phaseStep(phase){
+  const p = String(phase || "").toLowerCase();
+  if (!p) return "";
+  for (const [name, keys] of CYCLE_EXTRA) if (keys.some(k => p.includes(k))) return name;
+  for (const [name, keys] of CYCLE_STEPS) if (keys.some(k => p.includes(k))) return name;
+  return "";
+}
+function taskChip(id){
+  // A task chip, or "" when the ref cannot be resolved. itemRef falls back to the internal id, which is right
+  // for the hero line (the reader needs SOME identity for the running item) and wrong here: a chip whose whole
+  // purpose is to match the to-do list must not print a second name for the task. An engine-minted item has no
+  // ref at all, and the row's own words still say what the work is.
+  const ref = itemRef(id);
+  return (id && ref && String(ref) !== String(id)) ? '<span class="chip-id">'+esc(ref)+'</span>' : "";
+}
 function renderStepper(phase){
   const el = $("stepper"); if (!el) return;
-  const p = String(phase || "").toLowerCase();
-  // The conditional steps are matched FIRST because they are the more specific phrases; within the main
-  // path, prep is tested before work because "pre-work" and "pre-worker" both contain "work".
-  let curX = -1, cur = -1;
-  for (let i = 0; i < CYCLE_EXTRA.length && curX < 0; i++)
-    if (CYCLE_EXTRA[i][1].some(k => p.includes(k))) curX = i;
-  if (curX < 0)
-    for (let i = 0; i < CYCLE_STEPS.length && cur < 0; i++)
-      if (CYCLE_STEPS[i][1].some(k => p.includes(k))) cur = i;
+  // Resolved through the shared mapping above, then turned back into a position. Two lookups instead of
+  // one loop, in exchange for the story and the Q&A naming steps with the same words this row lights up.
+  const now = phaseStep(phase);
+  const curX = now ? CYCLE_EXTRA.findIndex(([n]) => n === now) : -1;
+  const cur = (curX < 0 && now) ? CYCLE_STEPS.findIndex(([n]) => n === now) : -1;
   // No match anywhere -> nothing is marked. Lighting the WRONG step is worse than lighting none; the
   // reader still sees both paths, just with no current marker.
   const main = CYCLE_STEPS
@@ -1249,15 +1319,56 @@ function populateStepPicker(recentStepsJson){
   const prev = sel.value;
   let steps = [];
   try { steps = recentStepsJson ? (JSON.parse(recentStepsJson) || []) : []; } catch(e){ steps = []; }
-  let html = '<option value="latest">the running step (default)</option>';
+  // Built ONCE into a row list, then rendered twice: into the hidden <select> (which is still the value the
+  // ask path reads) and into the compact list you tap. One list means the two can never offer different
+  // choices - the bug you would get from maintaining them separately.
+  const rows = [{ v:"latest", lbl:"the running step (default)" }];
   for (const s of steps){
     if(!s || !s.session) continue;
-    const lbl = esc(String(s.label || s.item || 'a step') + (s.at ? ' - ' + s.at : ''));
-    html += '<option value="'+esc(String(s.session))+'">'+lbl+'</option>';
+    rows.push({ v:String(s.session), lbl:String(s.label || s.item || 'a step'),
+                item:String(s.item || ""), phase:String(s.phase || ""), at:String(s.at || "") });
   }
-  html += '<option value="run">the whole run (ask anything)</option>';
-  sel.innerHTML = html;
+  rows.push({ v:"run", lbl:"the whole run (ask anything)" });
+  // The <select> keeps the plain one-line text: it is never seen, and its option text is what a browser
+  // without the list (or a screen reader) reads out.
+  sel.innerHTML = rows.map(r =>
+    '<option value="'+esc(r.v)+'">'+esc(r.lbl + (r.at ? ' - ' + r.at : ''))+'</option>').join("");
   if (prev && Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
+  const list = $("qaScopeList");
+  if (list){
+    list.innerHTML = rows.map(r => {
+      // The SAME two chips the story lines carry, from the same resolvers, so a step in this list and the
+      // same step in the story read as one thing (akn: "the q&a should too").
+      const step = phaseStep(r.phase);
+      const chips = taskChip(r.item)
+                  + (step ? '<span class="chip-ph">'+esc(step)+'</span>' : "");
+      return '<button type="button" class="sc-row" role="option" data-v="'+esc(r.v)+'"'
+           + ' aria-selected="'+(r.v === sel.value ? 'true' : 'false')+'"'
+           + ' onclick="qaScopePick(this.getAttribute(\'data-v\'))">'
+           + chips + '<span class="sc-lbl">'+esc(r.lbl)+'</span>'
+           + (r.at ? '<span class="sc-at">'+esc(r.at)+'</span>' : '') + '</button>';
+    }).join("");
+    list.setAttribute("role", "listbox");
+  }
+  qaScopeSummary();
+}
+function qaScopeSummary(){
+  // The closed row shows WHICH scope is selected - the one thing the old control did for free and the one
+  // thing a custom list can silently lose. Read from the <select>, so it cannot disagree with the value.
+  const sel = $("qaScope"), sum = $("qaScopeNow"); if(!sel || !sum) return;
+  const o = sel.options[sel.selectedIndex];
+  sum.textContent = o ? o.textContent : "the running step (default)";
+}
+function qaScopePick(v){
+  // Set the value on the <select> (still the single source of truth), mark the row, refresh the closed
+  // summary and collapse the list. No round-trip: picking a scope must feel immediate.
+  const sel = $("qaScope"); if(!sel) return;
+  if (Array.from(sel.options).some(o => o.value === v)) sel.value = v;
+  const list = $("qaScopeList");
+  if (list) for (const b of list.querySelectorAll(".sc-row"))
+    b.setAttribute("aria-selected", b.getAttribute("data-v") === v ? "true" : "false");
+  qaScopeSummary();
+  const box = $("qaScopeBox"); if (box) box.open = false;
 }
 async function renderQA(){
   const btn = $("qaAskBtn"), box = $("qaLatest"); if(!box) return;

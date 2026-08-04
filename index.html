@@ -1340,7 +1340,7 @@ function populateStepPicker(recentStepsJson){
   // Built ONCE into a row list, then rendered twice: into the hidden <select> (which is still the value the
   // ask path reads) and into the compact list you tap. One list means the two can never offer different
   // choices - the bug you would get from maintaining them separately.
-  const rows = [];   // the two fixed choices are added after the sort below, so they stay pinned
+  const rows = [];   // the two fixed choices are added after the sort below, so they stay pinned at the top
   for (const s of steps){
     if(!s || !s.session) continue;
     rows.push({ v:String(s.session), lbl:String(s.label || s.item || 'a step'),
@@ -1354,8 +1354,11 @@ function populateStepPicker(recentStepsJson){
   // choices are pinned - "the running step" is the default and belongs first, "the whole run" is the catch-all
   // and belongs last - so only the real steps are ordered.
   rows.sort((a, b) => String(b.ts || b.at || "").localeCompare(String(a.ts || a.at || "")));
-  rows.unshift({ v:"latest", lbl:"the running step (default)" });
-  rows.push({ v:"run", lbl:"the whole run (ask anything)" });
+  // BOTH fixed choices sit at the TOP, in this order - akn: "'the running step' should be pinned first and
+  // 'the whole run' as second". They are the two you reach for most, and putting the whole-run option last
+  // buried it under a scrolling list of past steps.
+  rows.unshift({ v:"latest", lbl:"the running step (default)" },
+               { v:"run", lbl:"the whole run (ask anything)" });
   // The <select> keeps the plain one-line text: it is never seen, and its option text is what a browser
   // without the list (or a screen reader) reads out.
   sel.innerHTML = rows.map(r =>
